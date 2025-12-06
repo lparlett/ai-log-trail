@@ -272,7 +272,7 @@ def test_load_config_invalid_db_parent(tmp_path: Path) -> None:
 
 
 def test_load_config_reports_dir_missing(tmp_path: Path) -> None:
-    """Test that missing reports directory triggers validation error."""
+    """Test that missing reports directory is created automatically."""
 
     sessions_root = tmp_path / "sessions"
     sessions_root.mkdir()
@@ -289,8 +289,9 @@ def test_load_config_reports_dir_missing(tmp_path: Path) -> None:
         """,
     )
 
-    with pytest.raises(ConfigError, match="does not exist"):
-        load_config(config_path)
+    config = load_config(config_path)
+    TC.assertEqual(config.outputs.reports_dir, missing_reports)
+    TC.assertTrue(missing_reports.exists())
 
 
 def test_load_config_invalid_backend(tmp_path: Path) -> None:

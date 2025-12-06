@@ -191,17 +191,15 @@ def _load_outputs_config(outputs_table: dict[str, Any] | None) -> OutputPaths:
     """Load and validate output directory configuration."""
 
     reports_dir = Path("reports")
-    user_supplied_reports = False
     if isinstance(outputs_table, dict):
         reports_value = outputs_table.get("reports_dir")
         if isinstance(reports_value, str) and reports_value.strip():
             reports_dir = Path(reports_value)
-            user_supplied_reports = True
 
     resolved_reports_dir = _validate_existing_directory(
         reports_dir,
         "outputs.reports_dir",
-        create_if_missing=not user_supplied_reports,
+        create_if_missing=True,
     )
     return OutputPaths(reports_dir=resolved_reports_dir)
 
