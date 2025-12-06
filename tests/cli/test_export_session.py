@@ -874,7 +874,9 @@ def test_load_rules_with_fallback_no_redact(tmp_path: Path) -> None:
 
 
 def test_load_rules_with_fallback_file_missing_with_db_fallback(
-    monkeypatch: MonkeyPatch, capsys: Any, tmp_path: Path  # pylint: disable=unused-argument
+    monkeypatch: MonkeyPatch,
+    capsys: Any,
+    tmp_path: Path,  # pylint: disable=unused-argument
 ) -> None:
     """Should fall back to DB rules when file missing and allow_db_fallback=True."""
     conn = get_connection(tmp_path / "db.sqlite")
