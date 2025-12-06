@@ -10,7 +10,6 @@ Related tests: tests/cli/test_redaction_rules_cli.py
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -22,7 +21,6 @@ from src.services.redaction_rules import (
     RuleOptions,
     load_rules,
     load_rules_from_db,
-    rule_to_dict,
     sync_rules_to_db,
     write_rules,
 )
@@ -209,12 +207,37 @@ def _handle_remove(
     sync_rules_to_db(conn, remaining)
     print(f"Removed rule '{rule_id}' and synced to database.")
 
-
 def _emit_rules(rules: Sequence[RedactionRule]) -> None:
-    """Emit rules as JSON lines for easy consumption."""
+    """Emit rules in a human-friendly format."""
 
-    for rule in rules:
-        print(json.dumps(rule_to_dict(rule)))
+    if not rules:
+        print("No rules found.")
+        return
+
+    print(f"\nFound {len(rules)} rule(s):\n")
+
+    for idx, rule in enumerate(rules, 1):
+        status = "✓ ENABLED" if rule.enabled else "✗ DISABLED"
+        print(f"{idx}. [{status}] {rule.id}")
+        print(f"   Type:        {rule.type}")
+        print(f"   Pattern:     {rule.pattern[:60]}{'...' if len(rule.pattern) > 60 else ''}")
+        print(f"   Scope:       {rule.scope}")
+        print(f"   Replacement: {rule.effective_replacement}")
+
+        if rule.reason:
+            print(f"   Reason:      {rule.reason}")
+        if rule.actor:
+            print(f"   Actor:       {rule.actor}")
+
+        options = []
+        if rule.ignore_case:
+            options.append("ignore-case")
+        if rule.dotall:
+            options.append("dotall")
+        if options:
+            print(f"   Options:     {', '.join(options)}")
+
+        print()
 
 
 def _load_rules_with_fallback(

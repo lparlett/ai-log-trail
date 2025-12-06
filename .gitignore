@@ -18,4 +18,4 @@ tests/htmlcov/
 coverage.xml
 
 # Report files
-reports/*
+reports/*.txt
