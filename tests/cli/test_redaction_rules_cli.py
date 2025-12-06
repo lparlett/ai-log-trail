@@ -85,4 +85,6 @@ def test_add_and_list_rules(
     )
     rules_cli.main()
     out = capsys.readouterr().out
-    TC.assertIn('"id": "r1"', out)
+    TC.assertIn("r1", out)
+    TC.assertIn("literal", out)
+    TC.assertIn("secret", out)
