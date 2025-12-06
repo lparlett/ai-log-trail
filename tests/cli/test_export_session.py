@@ -14,11 +14,17 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any, Callable
+from unittest.mock import MagicMock
 
 from pytest import MonkeyPatch
 
 import cli.export_session as export_cli
-from src.services.config import DatabaseConfig, OutputPaths, SessionsConfig
+from src.services.config import (
+    ConfigError,
+    DatabaseConfig,
+    OutputPaths,
+    SessionsConfig,
+)
 from src.services.database import ensure_schema, get_connection
 
 
@@ -499,3 +505,69 @@ class TestRenderExport:
         TC.assertFalse(export_cli._scope_matches("prompt", "field"))
         TC.assertTrue(export_cli._scope_matches("field", "field"))
         TC.assertFalse(export_cli._scope_matches("field", "prompt"))
+
+
+class TestMainErrorHandling:
+    """Test error handling in the main() function."""
+
+    def test_main_config_error(self, monkeypatch: MonkeyPatch, capsys: Any) -> None:
+        """Should handle configuration errors gracefully."""
+
+        def _raise_config_error() -> None:
+            raise ConfigError("Test config error")
+
+        monkeypatch.setattr(export_cli, "load_config", _raise_config_error)
+        monkeypatch.setattr(sys, "argv", ["prog"])
+
+        export_cli.main()
+        captured = capsys.readouterr()
+        TC.assertIn("Configuration error", captured.out)
+
+    def test_main_database_error(
+        self, monkeypatch: MonkeyPatch, capsys: Any, tmp_path: Path
+    ) -> None:
+        """Should handle database connection errors gracefully."""
+
+        def _raise_db_error(config: Any) -> None:
+            raise RuntimeError("Database connection failed")
+
+        config = SessionsConfig(
+            sessions_root=tmp_path / "sessions",
+            database=DatabaseConfig(),
+            outputs=OutputPaths(),
+        )
+        monkeypatch.setattr(export_cli, "load_config", lambda: config)
+        monkeypatch.setattr(export_cli, "get_connection_for_config", _raise_db_error)
+        monkeypatch.setattr(sys, "argv", ["prog"])
+
+        export_cli.main()
+        captured = capsys.readouterr()
+        TC.assertIn("Database error", captured.out)
+
+    def test_main_rules_load_error(
+        self, monkeypatch: MonkeyPatch, capsys: Any, tmp_path: Path
+    ) -> None:
+        """Should handle rule loading errors gracefully."""
+
+        config = SessionsConfig(
+            sessions_root=tmp_path / "sessions",
+            database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
+            outputs=OutputPaths(reports_dir=tmp_path),
+        )
+
+        mock_conn = MagicMock()
+
+        def _raise_rules_error(*args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("Failed to load rules")
+
+        monkeypatch.setattr(export_cli, "load_config", lambda: config)
+        monkeypatch.setattr(
+            export_cli, "get_connection_for_config", lambda x: mock_conn
+        )
+        monkeypatch.setattr(export_cli, "_load_rules_with_fallback", _raise_rules_error)
+        monkeypatch.setattr(sys, "argv", ["prog"])
+
+        export_cli.main()
+        captured = capsys.readouterr()
+        TC.assertIn("Failed to load rules", captured.out)
+        mock_conn.close.assert_called_once()

@@ -294,6 +294,53 @@ def test_load_config_reports_dir_missing(tmp_path: Path) -> None:
     TC.assertTrue(missing_reports.exists())
 
 
+def test_load_config_reports_dir_nested_missing(tmp_path: Path) -> None:
+    """Test that missing nested reports directory is created automatically."""
+
+    sessions_root = tmp_path / "sessions"
+    sessions_root.mkdir()
+
+    nested_reports = tmp_path / "a" / "b" / "c" / "reports"
+    config_path = _write_config(
+        tmp_path,
+        f"""
+        [sessions]
+        root = "{_path_for_toml(sessions_root)}"
+
+        [outputs]
+        reports_dir = "{_path_for_toml(nested_reports)}"
+        """,
+    )
+
+    config = load_config(config_path)
+    TC.assertEqual(config.outputs.reports_dir, nested_reports)
+    TC.assertTrue(nested_reports.exists())
+    TC.assertTrue(nested_reports.is_dir())
+
+
+def test_load_outputs_config_default_with_empty_dict(tmp_path: Path) -> None:
+    """_load_outputs_config should use default when passed empty outputs dict."""
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        outputs = _load_outputs_config({})
+        reports_path = tmp_path / "reports"
+        TC.assertTrue(reports_path.exists())
+        TC.assertEqual(outputs.reports_dir, reports_path.resolve())
+    finally:
+        os.chdir(cwd)
+
+
+def test_load_outputs_config_custom_path_created(tmp_path: Path) -> None:
+    """_load_outputs_config should create custom path if it doesn't exist."""
+
+    custom_reports = tmp_path / "custom_output_dir"
+    outputs = _load_outputs_config({"reports_dir": _path_for_toml(custom_reports)})
+    TC.assertTrue(custom_reports.exists())
+    TC.assertEqual(outputs.reports_dir, custom_reports.resolve())
+
+
 def test_load_config_invalid_backend(tmp_path: Path) -> None:
     """Unsupported database backend should raise ConfigError."""
 
