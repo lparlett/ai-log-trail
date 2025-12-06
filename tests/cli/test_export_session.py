@@ -352,3 +352,150 @@ class TestRenderExport:
         TC.assertGreater(len(lines), 0)
         joined_lines = "\n".join(lines)
         TC.assertIn("Session file:", joined_lines)
+
+    def test_render_event_with_various_payload_types(self, tmp_path: Path) -> None:
+        """Should handle different event payload types."""
+        config = self._fake_config(tmp_path)
+        conn = get_connection(config.database.sqlite_path)
+        ensure_schema(conn)
+        rules: list[Any] = []
+
+        # Test with token_count event
+        event: dict[str, Any] = {
+            "type": "event_msg",
+            "timestamp": "t0",
+            "payload": {"type": "token_count", "primary": "0.5", "secondary": "0.2"},
+        }
+        lines, _, _ = export_cli._render_event(
+            event,
+            rules,
+            conn=conn,
+            file_id=None,
+            prompt_id=None,
+            session_file_path="/test.jsonl",
+        )
+        TC.assertGreater(len(lines), 0)
+
+    def test_render_response_message_event(self, tmp_path: Path) -> None:
+        """Should render response_item message events."""
+        config = self._fake_config(tmp_path)
+        conn = get_connection(config.database.sqlite_path)
+        ensure_schema(conn)
+        rules: list[Any] = []
+
+        event: dict[str, Any] = {
+            "type": "response_item",
+            "timestamp": "t0",
+            "payload": {
+                "type": "message",
+                "content": [{"text": "This is a response"}],
+            },
+        }
+        lines, _, _ = export_cli._render_event(
+            event,
+            rules,
+            conn=conn,
+            file_id=None,
+            prompt_id=None,
+            session_file_path="/test.jsonl",
+        )
+        TC.assertGreater(len(lines), 0)
+
+    def test_render_function_call_event(self, tmp_path: Path) -> None:
+        """Should render response_item function_call events."""
+        config = self._fake_config(tmp_path)
+        conn = get_connection(config.database.sqlite_path)
+        ensure_schema(conn)
+        rules: list[Any] = []
+
+        event: dict[str, Any] = {
+            "type": "response_item",
+            "timestamp": "t0",
+            "payload": {
+                "type": "function_call",
+                "name": "shell",
+                "arguments": '{"command": "ls"}',
+            },
+        }
+        lines, _, _ = export_cli._render_event(
+            event,
+            rules,
+            conn=conn,
+            file_id=None,
+            prompt_id=None,
+            session_file_path="/test.jsonl",
+        )
+        TC.assertGreater(len(lines), 0)
+
+    def test_render_function_call_output_event(self, tmp_path: Path) -> None:
+        """Should render function_call_output events."""
+        config = self._fake_config(tmp_path)
+        conn = get_connection(config.database.sqlite_path)
+        ensure_schema(conn)
+        rules: list[Any] = []
+
+        event: dict[str, Any] = {
+            "type": "response_item",
+            "timestamp": "t0",
+            "payload": {
+                "type": "function_call_output",
+                "output": '{"result": "success"}',
+            },
+        }
+        lines, _, _ = export_cli._render_event(
+            event,
+            rules,
+            conn=conn,
+            file_id=None,
+            prompt_id=None,
+            session_file_path="/test.jsonl",
+        )
+        TC.assertGreater(len(lines), 0)
+
+    def test_render_turn_context_event(self, tmp_path: Path) -> None:
+        """Should render turn_context events."""
+        config = self._fake_config(tmp_path)
+        conn = get_connection(config.database.sqlite_path)
+        ensure_schema(conn)
+        rules: list[Any] = []
+
+        event: dict[str, Any] = {
+            "type": "turn_context",
+            "timestamp": "t0",
+            "payload": {"cwd": "/home/user/project"},
+        }
+        lines, _, _ = export_cli._render_event(
+            event,
+            rules,
+            conn=conn,
+            file_id=None,
+            prompt_id=None,
+            session_file_path="/test.jsonl",
+        )
+        TC.assertGreater(len(lines), 0)
+
+    def test_write_output_creates_file(self, tmp_path: Path) -> None:
+        """Should write output to a file."""
+        output_file = tmp_path / "output.txt"
+        lines = ["line 1", "line 2", "line 3"]
+
+        export_cli._write_output(output_file, lines)
+
+        TC.assertTrue(output_file.exists())
+        content = output_file.read_text(encoding="utf-8")
+        TC.assertIn("line 1", content)
+        TC.assertIn("line 2", content)
+        TC.assertIn("line 3", content)
+
+    def test_scope_matches_global(self) -> None:
+        """Should match 'global' scope against any context scope."""
+        TC.assertTrue(export_cli._scope_matches("global", "prompt"))
+        TC.assertTrue(export_cli._scope_matches("global", "field"))
+        TC.assertTrue(export_cli._scope_matches("global", "global"))
+
+    def test_scope_matches_specific(self) -> None:
+        """Should match specific scopes only to same scope."""
+        TC.assertTrue(export_cli._scope_matches("prompt", "prompt"))
+        TC.assertFalse(export_cli._scope_matches("prompt", "field"))
+        TC.assertTrue(export_cli._scope_matches("field", "field"))
+        TC.assertFalse(export_cli._scope_matches("field", "prompt"))
