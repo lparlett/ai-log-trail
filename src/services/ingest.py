@@ -391,6 +391,10 @@ def _update_summary_counts(summary: SessionSummary, counts: dict[str, int]) -> N
         summary[key] += counts.get(key, 0)
 
 
+# pylint: disable=too-many-instance-attributes
+# Justification: Session ingestion requires tracking: connection, file path, batch
+# size, verbosity flag, error list, optional rules, and computed file_id and summary.
+# All attributes are semantically distinct and necessary for processing.
 @dataclass
 class SessionIngester:
     """Process and store a single session's events."""
@@ -546,6 +550,9 @@ def ingest_sessions_in_directory(
     batch_size: int = 1000,
     rules_path: Path | None = None,
 ) -> Iterator[SessionSummary]:
+    # pylint: disable=too-many-arguments
+    # Justification: Caller needs to specify discovery root, DB path, and optional
+    # filtering/config parameters (limit, verbosity, batch size, rules file).
     """Ingest multiple session files beneath ``root``."""
 
     conn = get_connection(db_path)
@@ -621,6 +628,9 @@ def _apply_rule_applications_for_prompt(
     prompt_event: dict[str, Any],
     events: list[dict],
 ) -> None:
+    # pylint: disable=too-many-arguments
+    # Justification: Needs connection, rules, file/prompt IDs, session path, and
+    # the prompt event + following events for comprehensive redaction tracking.
     """Apply rules to prompt text and associated events."""
 
     payload = prompt_event.get("payload") if isinstance(prompt_event, dict) else None
@@ -659,6 +669,9 @@ def _apply_rule_applications_for_text(
     scope: str,
     field_path: str,
 ) -> None:
+    # pylint: disable=too-many-arguments
+    # Justification: Needs connection, rules, file/prompt IDs, session path, text,
+    # scope, and field path for auditable redaction application tracking.
     """Apply rules to a text fragment and persist redaction applications."""
 
     scoped_rules = [rule for rule in rules if _scope_matches(rule.scope, scope)]
@@ -688,6 +701,10 @@ def _apply_rule_applications_for_event(
     session_file_path: str,
     event: dict[str, Any],
 ) -> None:
+    # pylint: disable=too-many-arguments,too-many-locals,too-many-branches
+    # Justification: Needs connection, rules, file/prompt IDs, session path, and
+    # event for extracting and redacting multiple payload field types with varied
+    # branching for different event/payload combinations.
     """Apply rules to known event payload fields and record applications."""
 
     event_type = event.get("type")
@@ -757,7 +774,10 @@ def _record_rule_application(
     replacement_text: str,  # pylint: disable=unused-argument
     session_file_path: str,
 ) -> None:
-    """Persist rule application using upsert semantics."""
+    # pylint: disable=too-many-arguments
+    # Justification: Needs connection, rule metadata, file/prompt IDs, field path,
+    # replacement text, and session path for comprehensive audit trail recording.
+    """Persist rule applications with fingerprinting and upsert logic."""
 
     payload = RedactionCreate(
         file_id=file_id,

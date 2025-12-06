@@ -14,6 +14,10 @@ from sqlite3 import Connection
 from typing import Any, Iterable
 
 
+# pylint: disable=too-many-instance-attributes
+# Justification: Redaction tracking requires: file_id, prompt_id, rule_id,
+# fingerprint, field_path, reason, actor, session_file_path, applied_at. Each
+# field is necessary for comprehensive audit trail and deduplication.
 @dataclass(frozen=True)
 class RedactionCreate:
     """Input payload for creating a redaction record."""

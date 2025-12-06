@@ -153,8 +153,8 @@ def _render_export(
             rendered, counts, manual = _render_event(
                 event,
                 rules,
-                conn,
-                file_id,
+                conn=conn,
+                file_id=file_id,
                 prompt_id=None,
                 session_file_path=str(session_file),
             )
@@ -200,8 +200,8 @@ def _render_export(
             rendered, counts, manual = _render_event(
                 event,
                 rules,
-                conn,
-                file_id,
+                conn=conn,
+                file_id=file_id,
                 prompt_id=prompt_id_for_group,
                 session_file_path=str(session_file),
             )
@@ -227,11 +227,15 @@ def _render_export(
 def _render_event(
     event: dict[str, Any],
     rules: list[RedactionRule],
+    *,
     conn: Any,
     file_id: int | None,
     prompt_id: int | None,
     session_file_path: str,
 ) -> tuple[list[str], Counter[str], Counter[str]]:
+    # pylint: disable=too-many-arguments
+    # Justification: Needs event data, rules, connection, file/prompt context IDs,
+    # and session path to apply redactions and track applications per field.
     """Render an individual event applying redactions."""
 
     summary_lines: list[str] = []
@@ -334,6 +338,9 @@ def _apply_all_redactions(
     scope: str,
     field_path: str,
 ) -> tuple[str, Counter[str], Counter[str]]:
+    # pylint: disable=too-many-arguments
+    # Justification: Needs text to redact, rules list, DB connection, file/prompt
+    # context IDs, session path, scope, and field path for audit trail recording.
     """Apply rule-based and manual redactions with precedence."""
 
     rule_counts: Counter[str] = Counter()
@@ -381,6 +388,9 @@ def _record_rule_application(
     replacement_text: str,  # pylint: disable=unused-argument
     session_file_path: str,
 ) -> None:
+    # pylint: disable=too-many-arguments
+    # Justification: Needs connection, rule metadata, file/prompt IDs, field path,
+    # replacement text, and session path for comprehensive audit trail recording.
     """Persist a rule application using the append-only table with upsert."""
 
     normalized_field_path = field_path

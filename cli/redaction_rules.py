@@ -207,6 +207,7 @@ def _handle_remove(
     sync_rules_to_db(conn, remaining)
     print(f"Removed rule '{rule_id}' and synced to database.")
 
+
 def _emit_rules(rules: Sequence[RedactionRule]) -> None:
     """Emit rules in a human-friendly format."""
 
@@ -220,7 +221,9 @@ def _emit_rules(rules: Sequence[RedactionRule]) -> None:
         status = "✓ ENABLED" if rule.enabled else "✗ DISABLED"
         print(f"{idx}. [{status}] {rule.id}")
         print(f"   Type:        {rule.type}")
-        print(f"   Pattern:     {rule.pattern[:60]}{'...' if len(rule.pattern) > 60 else ''}")
+        print(
+            f"   Pattern:     {rule.pattern[:60]}{'...' if len(rule.pattern) > 60 else ''}"
+        )
         print(f"   Scope:       {rule.scope}")
         print(f"   Replacement: {rule.effective_replacement}")
 

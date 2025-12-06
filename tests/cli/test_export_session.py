@@ -283,6 +283,9 @@ class TestWriteOutput:
 
 
 class TestApplyAllRedactions:
+    # pylint: disable=too-few-public-methods
+    # Justification: Single-test class for organizing related redaction application
+    # tests without bloating the module namespace.
     """Test redaction application."""
 
     def test_apply_all_redactions_no_rules(self, tmp_path: Path) -> None:
@@ -307,6 +310,9 @@ class TestApplyAllRedactions:
 
 
 class TestRenderExport:
+    # pylint: disable=too-few-public-methods
+    # Justification: Single-test class for organizing export rendering tests
+    # without bloating the module namespace.
     """Test full export rendering."""
 
     def _fake_config(self, tmp_path: Path) -> SessionsConfig:
