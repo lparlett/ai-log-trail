@@ -355,10 +355,12 @@ class TestLoadSessionEvents:
     ) -> None:
         """load_session_events should report correct line number on error."""
         session_file = tmp_path / "session.jsonl"
-        content = (
-            '{"valid": "json"}\n'
-            '{"valid": "json"}\n'
-            '{"invalid": json}\n'
+        content = "".join(
+            [
+                '{"valid": "json"}\n',
+                '{"valid": "json"}\n',
+                '{"invalid": json}\n',
+            ]
         )
         session_file.write_text(content, encoding="utf-8")
 
