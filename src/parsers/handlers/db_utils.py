@@ -186,7 +186,7 @@ def extract_turn_context(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def get_reasoning_text(payload: dict) -> str | None:
+def get_reasoning_text(payload: dict[str, Any]) -> str | None:
     """Extract reasoning text from payload if present."""
 
     text = payload.get("text")
@@ -270,7 +270,7 @@ class PromptInsert:
     prompt_index: int
     timestamp: str | None
     message: str
-    raw: dict
+    raw: dict[str, Any]
 
 
 @dataclass

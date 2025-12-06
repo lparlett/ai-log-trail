@@ -915,3 +915,46 @@ class TestIngestSessionFileEdgeCases:
 
         with pytest.raises(SessionDiscoveryError):
             list(ingest_sessions_in_directory(empty_dir, db_path, verbose=False))
+
+
+class TestDatabaseErrorPaths:
+    """Test error handling in database operations."""
+
+    # pylint: disable=too-few-public-methods
+    # Justification: Single test method for database error path is sufficient
+    def test_ensure_file_row_with_existing_file(self, tmp_path: Path) -> None:
+        """_ensure_file_row should return existing id and clear prompts/sessi
+        ons."""
+        from src.services.ingest import _ensure_file_row
+
+        conn = get_connection(tmp_path / "db.sqlite")
+        ensure_schema(conn)
+
+        session_file = tmp_path / "session.jsonl"
+
+        # First call: creates file
+        file_id_1 = _ensure_file_row(conn, session_file)
+        TC.assertGreater(file_id_1, 0)
+
+        # Insert some test data
+        conn.execute(
+            "INSERT INTO prompts (file_id, prompt_index) VALUES (?, ?)",
+            (file_id_1, 0),
+        )
+        conn.commit()
+
+        prompt_count_before = conn.execute(
+            "SELECT COUNT(*) FROM prompts WHERE file_id = ?", (file_id_1,)
+        ).fetchone()[0]
+        TC.assertEqual(prompt_count_before, 1)
+
+        # Second call: should clear prompts and return existing id
+        file_id_2 = _ensure_file_row(conn, session_file)
+        TC.assertEqual(file_id_1, file_id_2)
+
+        prompt_count_after = conn.execute(
+            "SELECT COUNT(*) FROM prompts WHERE file_id = ?", (file_id_1,)
+        ).fetchone()[0]
+        TC.assertEqual(prompt_count_after, 0)
+
+        conn.close()

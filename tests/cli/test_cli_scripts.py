@@ -1091,7 +1091,7 @@ def test_migrate_helpers_cover_counts(
         _pg_conn: Any,
         _table: str,
         _columns: Any,
-        rows: list[tuple],
+        rows: list[tuple[Any, ...]],
         _execute_values: Any,
     ) -> None:
         """Accumulate row counts to assert batch flushing."""

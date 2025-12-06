@@ -113,6 +113,63 @@ def test_export_applies_redactions(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     TC.assertNotIn("secret content", contents)
 
 
+def test_export_no_redact_flag(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    """Export with --no-redact should skip redactions."""
+
+    _write_session(tmp_path)
+    rules_file = _write_rules(tmp_path)
+    config = _fake_config(tmp_path)
+    conn_factory = _connection_factory(config.database.sqlite_path)
+
+    monkeypatch.setattr(export_cli, "load_config", lambda: config)
+    monkeypatch.setattr(export_cli, "get_connection_for_config", conn_factory)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prog",
+            "--rules-file",
+            str(rules_file),
+            "--no-redact",
+        ],
+    )
+
+    export_cli.main()
+    export_path = config.outputs.reports_dir / "export.txt"
+    contents = export_path.read_text(encoding="utf-8")
+    TC.assertIn("secret prompt text", contents)
+    TC.assertNotIn("<REDACTED>", contents)
+
+
+def test_export_custom_output_path(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    """Export should write to custom output path when specified."""
+
+    _write_session(tmp_path)
+    rules_file = _write_rules(tmp_path)
+    config = _fake_config(tmp_path)
+    custom_output = tmp_path / "custom_export.txt"
+    conn_factory = _connection_factory(config.database.sqlite_path)
+
+    monkeypatch.setattr(export_cli, "load_config", lambda: config)
+    monkeypatch.setattr(export_cli, "get_connection_for_config", conn_factory)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "prog",
+            "--rules-file",
+            str(rules_file),
+            "--output",
+            str(custom_output),
+        ],
+    )
+
+    export_cli.main()
+    TC.assertTrue(custom_output.exists())
+    contents = custom_output.read_text(encoding="utf-8")
+    TC.assertIn("Session file:", contents)
+
+
 class TestBuildParser:
     """Test argument parser construction."""
 
@@ -571,3 +628,367 @@ class TestMainErrorHandling:
         captured = capsys.readouterr()
         TC.assertIn("Failed to load rules", captured.out)
         mock_conn.close.assert_called_once()
+
+
+class TestRenderExportErrorPaths:
+    """Test error handling in _render_export function."""
+
+    def test_render_export_session_discovery_error(
+        self, monkeypatch: MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Should handle SessionDiscoveryError gracefully."""
+        from src.parsers.session_parser import (  # pylint: disable=import-outside-toplevel
+            SessionDiscoveryError,
+        )
+
+        config = SessionsConfig(
+            sessions_root=tmp_path / "sessions",
+            database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
+            outputs=OutputPaths(reports_dir=tmp_path),
+        )
+        conn = get_connection(config.database.sqlite_path)
+        ensure_schema(conn)
+
+        def _raise_discovery_error(*args: Any, **kwargs: Any) -> None:
+            raise SessionDiscoveryError("No sessions found")
+
+        monkeypatch.setattr(
+            export_cli, "find_first_session_file", _raise_discovery_error
+        )
+
+        lines, summary = export_cli._render_export(config, [], conn)
+        conn.close()
+
+        TC.assertGreater(len(lines), 0)
+        TC.assertIn("Session discovery error", lines[0])
+        TC.assertEqual(summary, [])
+
+    def test_render_export_with_empty_groups(self, tmp_path: Path) -> None:
+        """Should render export with empty user groups."""
+        config = SessionsConfig(
+            sessions_root=tmp_path / "sessions",
+            database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
+            outputs=OutputPaths(reports_dir=tmp_path),
+        )
+        conn = get_connection(config.database.sqlite_path)
+        ensure_schema(conn)
+
+        # Create session with events but no user messages
+        session_root = tmp_path / "sessions" / "2025" / "01" / "01"
+        session_root.mkdir(parents=True, exist_ok=True)
+        events = [
+            {
+                "type": "turn_context",
+                "timestamp": "t0",
+                "payload": {"cwd": "/home/user"},
+            }
+        ]
+        lines_text = "\n".join(json.dumps(event) for event in events)
+        (session_root / "session.jsonl").write_text(lines_text + "\n", encoding="utf-8")
+
+        lines, _ = export_cli._render_export(config, [], conn)
+        conn.close()
+
+        TC.assertGreater(len(lines), 0)
+        TC.assertIn("Session file:", lines[0])
+
+
+class TestRenderEventVariations:
+    """Test _render_event with various payload structures."""
+
+    def test_render_event_payload_not_dict(self, tmp_path: Path) -> None:
+        """Should handle non-dict payload gracefully."""
+        conn = get_connection(tmp_path / "db.sqlite")
+        ensure_schema(conn)
+
+        event: dict[str, Any] = {
+            "type": "unknown_event",
+            "timestamp": "t0",
+            "payload": "not_a_dict",
+        }
+        lines, rule_counts, manual_counts = export_cli._render_event(
+            event,
+            [],
+            conn=conn,
+            file_id=None,
+            prompt_id=None,
+            session_file_path="/test.jsonl",
+        )
+        conn.close()
+
+        TC.assertGreater(len(lines), 0)
+        TC.assertEqual(len(rule_counts), 0)
+        TC.assertEqual(len(manual_counts), 0)
+
+    def test_render_event_missing_timestamp(self, tmp_path: Path) -> None:
+        """Should handle missing timestamp in event."""
+        conn = get_connection(tmp_path / "db.sqlite")
+        ensure_schema(conn)
+
+        event: dict[str, Any] = {
+            "type": "event_msg",
+            "payload": {"type": "agent_reasoning", "text": "test"},
+        }
+        lines, _, _ = export_cli._render_event(
+            event,
+            [],
+            conn=conn,
+            file_id=None,
+            prompt_id=None,
+            session_file_path="/test.jsonl",
+        )
+        conn.close()
+
+        TC.assertGreater(len(lines), 0)
+        TC.assertIn("?", lines[0])
+
+    def test_render_event_agent_message_empty_text(self, tmp_path: Path) -> None:
+        """Should skip agent_message with empty text."""
+        conn = get_connection(tmp_path / "db.sqlite")
+        ensure_schema(conn)
+
+        event: dict[str, Any] = {
+            "type": "event_msg",
+            "timestamp": "t0",
+            "payload": {"type": "agent_message", "message": ""},
+        }
+        lines, _, _ = export_cli._render_event(
+            event,
+            [],
+            conn=conn,
+            file_id=None,
+            prompt_id=None,
+            session_file_path="/test.jsonl",
+        )
+        conn.close()
+
+        # Should only have header, not expanded message
+        TC.assertEqual(len(lines), 1)
+
+    def test_render_event_response_message_non_list_content(
+        self, tmp_path: Path
+    ) -> None:
+        """Should handle response_item with non-list content."""
+        conn = get_connection(tmp_path / "db.sqlite")
+        ensure_schema(conn)
+
+        event: dict[str, Any] = {
+            "type": "response_item",
+            "timestamp": "t0",
+            "payload": {"type": "message", "content": "not_a_list"},
+        }
+        lines, _, _ = export_cli._render_event(
+            event,
+            [],
+            conn=conn,
+            file_id=None,
+            prompt_id=None,
+            session_file_path="/test.jsonl",
+        )
+        conn.close()
+
+        TC.assertEqual(len(lines), 1)
+
+
+def test_render_event_agent_message_text(tmp_path: Path) -> None:
+    """Should render agent_message with text."""
+    conn = get_connection(tmp_path / "db.sqlite")
+    ensure_schema(conn)
+
+    event: dict[str, Any] = {
+        "type": "event_msg",
+        "timestamp": "t0",
+        "payload": {"type": "agent_message", "message": "Agent response here"},
+    }
+    lines, _, _ = export_cli._render_event(
+        event,
+        [],
+        conn=conn,
+        file_id=None,
+        prompt_id=None,
+        session_file_path="/test.jsonl",
+    )
+    conn.close()
+
+    TC.assertTrue(any("Agent response here" in line for line in lines))
+
+
+def test_render_event_with_redaction_counts(tmp_path: Path) -> None:
+    """Should handle rendering with redaction rules applied."""
+    from src.services.redaction_rules import (  # pylint: disable=import-outside-toplevel
+        RedactionRule,
+        RuleOptions,
+    )
+
+    config = SessionsConfig(
+        sessions_root=tmp_path / "sessions",
+        database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
+        outputs=OutputPaths(reports_dir=tmp_path),
+    )
+    conn = get_connection(config.database.sqlite_path)
+    ensure_schema(conn)
+
+    # Create session file
+    session_root = tmp_path / "sessions" / "2025" / "01" / "01"
+    session_root.mkdir(parents=True, exist_ok=True)
+    events = [
+        {
+            "type": "event_msg",
+            "timestamp": "t0",
+            "payload": {"type": "user_message", "message": "test message"},
+        },
+    ]
+    lines_text = "\n".join(json.dumps(event) for event in events)
+    (session_root / "session.jsonl").write_text(lines_text + "\n", encoding="utf-8")
+
+    # Create redaction rule object (even if no matches, tests the code path)
+    rule = RedactionRule(
+        id="test-rule",
+        type="literal",
+        pattern="nothing",
+        options=RuleOptions(scope="global"),
+    )
+
+    lines, _ = export_cli._render_export(config, [rule], conn)
+    conn.close()
+
+    # Should produce output
+    TC.assertGreater(len(lines), 0)
+    TC.assertIn("Session file:", lines[0])
+
+
+def test_load_rules_with_fallback_no_redact(tmp_path: Path) -> None:
+    """_load_rules_with_fallback should return empty list when no_redact=True."""
+    conn = get_connection(tmp_path / "db.sqlite")
+    ensure_schema(conn)
+
+    rules = export_cli._load_rules_with_fallback(
+        tmp_path / "rules.json",
+        conn,
+        allow_db_fallback=False,
+        no_redact=True,
+    )
+    conn.close()
+
+    TC.assertEqual(rules, [])
+
+
+def test_load_rules_with_fallback_file_missing_with_db_fallback(
+    _monkeypatch: MonkeyPatch, capsys: Any, tmp_path: Path
+) -> None:
+    """Should fall back to DB rules when file missing and allow_db_fallback=True."""
+    conn = get_connection(tmp_path / "db.sqlite")
+    ensure_schema(conn)
+
+    # Insert a rule in DB
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO redaction_rules
+        (id, type, pattern, scope, replacement_text, rule_fingerprint)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        ("db-rule", "literal", "secret", "global", "<REDACTED>", "fp123"),
+    )
+    conn.commit()
+
+    # Load with fallback enabled
+    rules = export_cli._load_rules_with_fallback(
+        tmp_path / "nonexistent.json",
+        conn,
+        allow_db_fallback=True,
+        no_redact=False,
+    )
+    conn.close()
+
+    captured = capsys.readouterr()
+    TC.assertGreater(len(rules), 0)
+    TC.assertIn("using rules stored in the database", captured.out)
+
+
+def test_load_rules_with_fallback_file_error_no_db(capsys: Any, tmp_path: Path) -> None:
+    """Should raise when rules file invalid and no DB fallback available."""
+    conn = get_connection(tmp_path / "db.sqlite")
+    ensure_schema(conn)
+
+    with TC.assertRaises(Exception):
+        export_cli._load_rules_with_fallback(
+            tmp_path / "nonexistent.json",
+            conn,
+            allow_db_fallback=False,
+            no_redact=False,
+        )
+
+    conn.close()
+    captured = capsys.readouterr()
+    TC.assertIn("Failed to load rules file", captured.out)
+
+
+def test_render_event_function_call_empty_arguments(tmp_path: Path) -> None:
+    """Should handle function_call with empty arguments."""
+    conn = get_connection(tmp_path / "db.sqlite")
+    ensure_schema(conn)
+
+    event: dict[str, Any] = {
+        "type": "response_item",
+        "timestamp": "t0",
+        "payload": {"type": "function_call", "name": "test_fn", "arguments": ""},
+    }
+    lines, _, _ = export_cli._render_event(
+        event,
+        [],
+        conn=conn,
+        file_id=None,
+        prompt_id=None,
+        session_file_path="/test.jsonl",
+    )
+    conn.close()
+
+    # Should have function name but not arguments
+    TC.assertTrue(any("function: test_fn" in line for line in lines))
+
+
+def test_render_event_turn_context_with_cwd(tmp_path: Path) -> None:
+    """Should render turn_context with cwd."""
+    conn = get_connection(tmp_path / "db.sqlite")
+    ensure_schema(conn)
+
+    event: dict[str, Any] = {
+        "type": "turn_context",
+        "timestamp": "t0",
+        "payload": {"cwd": "/home/user/project"},
+    }
+    lines, _, _ = export_cli._render_event(
+        event,
+        [],
+        conn=conn,
+        file_id=None,
+        prompt_id=None,
+        session_file_path="/test.jsonl",
+    )
+    conn.close()
+
+    TC.assertTrue(any("cwd:" in line for line in lines))
+
+
+def test_render_event_turn_context_no_cwd(tmp_path: Path) -> None:
+    """Should handle turn_context without cwd."""
+    conn = get_connection(tmp_path / "db.sqlite")
+    ensure_schema(conn)
+
+    event: dict[str, Any] = {
+        "type": "turn_context",
+        "timestamp": "t0",
+        "payload": {},
+    }
+    lines, _, _ = export_cli._render_event(
+        event,
+        [],
+        conn=conn,
+        file_id=None,
+        prompt_id=None,
+        session_file_path="/test.jsonl",
+    )
+    conn.close()
+
+    TC.assertEqual(len(lines), 1)

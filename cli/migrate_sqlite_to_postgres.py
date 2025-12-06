@@ -256,7 +256,7 @@ def _copy_table(
     columns = [col[0] for col in src_cur.description]
     column_list = sql.SQL(", ").join(sql.Identifier(col) for col in columns)
 
-    rows: list[tuple] = []
+    rows: list[tuple[Any, ...]] = []
     for row in src_cur.fetchall():
         rows.append(tuple(row))
         if len(rows) >= batch_size:
@@ -270,7 +270,7 @@ def _execute_batch(
     pg_conn: Any,
     table: str,
     columns: Any,
-    rows: list[tuple],
+    rows: list[tuple[Any, ...]],
     execute_values: Callable[..., Any],
 ) -> None:
     """Execute a batch insert with execute_values for performance."""

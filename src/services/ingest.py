@@ -58,6 +58,14 @@ from src.services.validation import EventValidationError, validate_event
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "get_connection",
+    "ensure_schema",
+    "SessionDiscoveryError",
+    "ingest_session_file",
+    "ingest_sessions_in_directory",
+]
+
 
 def build_event_handler_deps() -> EventHandlerDeps:
     """Return the default EventHandlerDeps wired to db_utils helpers."""
@@ -603,7 +611,7 @@ def _apply_rule_applications_pre_prompt(
     rules: list[RedactionRule],
     file_id: int,
     session_file_path: str,
-    prelude: list[dict],
+    prelude: list[dict[str, Any]],
 ) -> None:
     """Apply rules to prelude events (no prompt id)."""
 
@@ -626,7 +634,7 @@ def _apply_rule_applications_for_prompt(
     prompt_id: int,
     session_file_path: str,
     prompt_event: dict[str, Any],
-    events: list[dict],
+    events: list[dict[str, Any]],
 ) -> None:
     # pylint: disable=too-many-arguments
     # Justification: Needs connection, rules, file/prompt IDs, session path, and
