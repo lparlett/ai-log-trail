@@ -190,6 +190,18 @@ def test_group_session_describe_additional_payloads() -> None:
     desc = group_session.describe_event(token_event)
     TC.assertIn("secondary", desc)
 
+    # Test token_count with non-dict rate_limits
+    bad_token_event = {
+        "type": "event_msg",
+        "timestamp": "t",
+        "payload": {
+            "type": "token_count",
+            "rate_limits": "not a dict",
+        },
+    }
+    bad_desc = group_session.describe_event(bad_token_event)
+    TC.assertIn("token_count", bad_desc)
+
     reasoning_summary = {
         "type": "response_item",
         "timestamp": "t",
@@ -327,6 +339,45 @@ def test_group_session_main_with_output_override(
 
     group_session.main()
     TC.assertTrue(out_path.exists())
+
+
+def test_group_session_main_error_without_output_path(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """group_session.main should handle errors gracefully when output_path is None."""
+
+    def mock_load_config() -> SessionsConfig:
+        raise ConfigError("Config failed")
+
+    monkeypatch.setattr(group_session, "load_config", mock_load_config)
+    monkeypatch.setattr(sys, "argv", ["prog"])
+
+    group_session.main()
+    out = capsys.readouterr().out
+    TC.assertIn("Configuration error", out)
+
+
+def test_group_session_describe_turn_context_edge_cases() -> None:
+    """describe_event should handle turn_context event with missing/non-string cwd."""
+    # Event where event_type is "turn_context" with a dict payload (no cwd)
+    event = {
+        "type": "turn_context",
+        "timestamp": "2025-10-31T10:00:00Z",
+        "payload": {"other_field": "value"},
+    }
+    desc = group_session.describe_event(event)
+    # Should have the header but no cwd line
+    TC.assertIn("turn_context", desc)
+
+    # Event where payload_type is "turn_context" via non-matching event_type
+    # This tests the `if payload_type == "turn_context"` path (line 69)
+    event2 = {
+        "type": "unknown_event_type",
+        "timestamp": "2025-10-31T10:00:01Z",
+        "payload": {"type": "turn_context", "cwd": "/some/path"},
+    }
+    desc2 = group_session.describe_event(event2)
+    TC.assertIn("cwd: /some/path", desc2)
 
 
 def test_ingest_resolve_runtime_options_debug_limit() -> None:

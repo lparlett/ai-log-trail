@@ -289,6 +289,24 @@ class TestLookupPromptId:
 
         TC.assertEqual(prompt_id, expected_id)
 
+    def test_lookup_prompt_id_nonexistent_prompt_for_file(self, tmp_path: Path) -> None:
+        """Lookup should return None when file exists but prompt doesn't."""
+        conn = get_connection(tmp_path / "db.sqlite")
+        ensure_schema(conn)
+
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO files (path, ingested_at) VALUES (?, datetime('now'))",
+            ("/test/session.jsonl",),
+        )
+        file_id = cursor.lastrowid
+        conn.commit()
+
+        # Query for a nonexistent prompt index
+        prompt_id = export_cli._lookup_prompt_id(conn, file_id, 999)
+
+        TC.assertIsNone(prompt_id)
+
 
 class TestIndent:
     """Test indentation helper."""
@@ -874,7 +892,6 @@ def test_load_rules_with_fallback_no_redact(tmp_path: Path) -> None:
 
 
 def test_load_rules_with_fallback_file_missing_with_db_fallback(
-    monkeypatch: MonkeyPatch,
     capsys: Any,
     tmp_path: Path,  # pylint: disable=unused-argument
 ) -> None:

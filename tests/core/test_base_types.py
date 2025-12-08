@@ -59,8 +59,8 @@ def test_agent_config_assigns_fields() -> None:
 
         @classmethod
         def from_dict(
-            cls, data: dict[str, str]
-        ) -> "MinimalConfig":  # pylint: disable=unused-argument
+            cls, data: dict[str, str]  # pylint: disable=unused-argument
+        ) -> "MinimalConfig":
             """Deserialize from dictionary."""
             return cls()
 

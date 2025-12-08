@@ -250,6 +250,39 @@ def test_update_redaction_sets_prompt_and_actor(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_update_redaction_sets_active_status(tmp_path: Path) -> None:
+    """update_redaction should allow active flag updates."""
+
+    conn = _make_connection(tmp_path)
+    prompt_id = _insert_prompt(conn)
+    redaction_id = create_redaction(
+        conn,
+        RedactionCreate(
+            file_id=None,
+            prompt_id=prompt_id,
+            rule_id=None,
+            rule_fingerprint="fp-update-active",
+        ),
+    )
+
+    # Update to deactivate
+    updated = update_redaction(conn, redaction_id, active=False)
+    TC.assertTrue(updated)
+    refreshed = get_redaction(conn, redaction_id)
+    TC.assertIsNotNone(refreshed)
+    refreshed = cast("RedactionRecord", refreshed)
+    TC.assertEqual(refreshed.active, 0)
+
+    # Update to reactivate
+    updated = update_redaction(conn, redaction_id, active=True)
+    TC.assertTrue(updated)
+    refreshed = get_redaction(conn, redaction_id)
+    TC.assertIsNotNone(refreshed)
+    refreshed = cast("RedactionRecord", refreshed)
+    TC.assertEqual(refreshed.active, 1)
+    conn.close()
+
+
 def test_create_redaction_raises_when_lastrowid_missing() -> None:
     """create_redaction should raise when cursor.lastrowid is None."""
 

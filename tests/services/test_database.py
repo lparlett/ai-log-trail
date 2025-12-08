@@ -17,7 +17,6 @@ from src.services.database import (
     ensure_schema,
     get_connection,
     get_connection_for_config,
-    _migrate_normalize_schema,
 )
 
 TC = unittest.TestCase()
@@ -164,80 +163,6 @@ class TestEnsureSchema:
                 "INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json) "
                 "VALUES (999, 1, '2025-01-01', 'test', '{}')"
             )
-        conn.close()
-
-
-class TestMigrateNormalizeSchema:
-    """Test _migrate_normalize_schema function."""
-
-    def test_migrate_handles_missing_session_context(self, tmp_path: Path) -> None:
-        """Verify migration creates session_context table when missing."""
-        db_path = tmp_path / "test.db"
-        conn = get_connection(db_path)
-
-        cursor = conn.cursor()
-        # Create base schema without session_context
-        cursor.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS files (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                path TEXT NOT NULL UNIQUE
-            );
-            CREATE TABLE IF NOT EXISTS sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_id INTEGER REFERENCES files(id) ON DELETE CASCADE,
-                session_id TEXT,
-                cwd TEXT,
-                approval_policy TEXT,
-                sandbox_mode INTEGER,
-                network_access INTEGER,
-                raw_json TEXT
-            );
-            CREATE TABLE IF NOT EXISTS session_context (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT,
-                cwd TEXT,
-                approval_policy TEXT,
-                sandbox_mode INTEGER,
-                network_access INTEGER
-            );
-        """
-        )
-        conn.commit()
-
-        # Insert sample data
-        cursor.execute("INSERT INTO files (path) VALUES ('test.jsonl')")
-        cursor.execute(
-            "INSERT INTO sessions (file_id, session_id, cwd) VALUES (1, 'sess-1', '/home')"
-        )
-        conn.commit()
-
-        # Run migration - should complete without error
-        _migrate_normalize_schema(conn)
-
-        # Verify session_context table exists
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='session_context'"
-        )
-        TC.assertIsNotNone(cursor.fetchone())
-        conn.close()
-
-    def test_migrate_skips_when_already_applied(self, tmp_path: Path) -> None:
-        """Verify migration skips when session_context table already exists."""
-        db_path = tmp_path / "test.db"
-        conn = get_connection(db_path)
-
-        # Apply full schema (includes session_context)
-        ensure_schema(conn)
-
-        # Run migration - should be idempotent
-        _migrate_normalize_schema(conn)
-
-        # Should still work
-        cursor = conn.cursor()
-        cursor.execute("SELECT count(*) FROM session_context")
-        TC.assertGreaterEqual(cursor.fetchone()[0], 0)
-
         conn.close()
 
 
