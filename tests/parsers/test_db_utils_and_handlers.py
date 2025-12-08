@@ -655,6 +655,34 @@ def test_handle_response_item_event_calls_and_outputs(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_handle_response_item_event_unknown_subtype(tmp_path: Path) -> None:
+    """handle_response_item_event should gracefully skip unknown subtypes."""
+    conn = _make_connection(tmp_path)
+    file_id, prompt_id = _create_file_and_prompt(conn, "## Test")
+    deps = _deps_with_real_inserts()
+    tracker = FunctionCallTracker()
+    counts: dict[str, int] = {"function_calls": 0}
+
+    # Unknown subtype should be silently ignored
+    handle_response_item_event(
+        deps,
+        EventContext(
+            conn=conn,
+            file_id=file_id,
+            prompt_id=prompt_id,
+            timestamp="t0",
+            payload={"type": "unknown_type", "data": "some value"},
+            raw_event={"type": "response_item"},
+            counts=counts,
+        ),
+        tracker,
+    )
+
+    # No function calls should be created
+    TC.assertEqual(counts["function_calls"], 0)
+    conn.close()
+
+
 def test_record_agent_reasoning_sources(tmp_path: Path) -> None:
     """_record_agent_reasoning should store different sources."""
 

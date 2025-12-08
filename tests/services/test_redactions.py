@@ -352,6 +352,90 @@ def test_insert_prompt_raises_when_file_id_missing() -> None:
     dummy.close()
 
 
+def test_update_redaction_with_rule_id(tmp_path: Path) -> None:
+    """update_redaction should handle rule_id updates to None."""
+    conn = _make_connection(tmp_path)
+    prompt_id = _insert_prompt(conn)
+
+    redaction_id = create_redaction(
+        conn,
+        RedactionCreate(
+            file_id=None,
+            prompt_id=prompt_id,
+            rule_id=None,
+            rule_fingerprint="fp-initial",
+        ),
+    )
+
+    # Update with new rule_id (None remains None without a valid rule)
+    # This tests the _append_rule_id code path
+    updated = update_redaction(conn, redaction_id, rule_id=None)
+    TC.assertFalse(updated)  # No actual change when setting to None
+
+    conn.close()
+
+
+def test_update_redaction_with_rule_fingerprint(tmp_path: Path) -> None:
+    """update_redaction should handle rule_fingerprint updates."""
+    conn = _make_connection(tmp_path)
+    prompt_id = _insert_prompt(conn)
+
+    redaction_id = create_redaction(
+        conn,
+        RedactionCreate(
+            file_id=None,
+            prompt_id=prompt_id,
+            rule_id=None,
+            rule_fingerprint="fp-v1",
+        ),
+    )
+
+    # Update with new rule_fingerprint
+    updated = update_redaction(conn, redaction_id, rule_fingerprint="fp-v2")
+    TC.assertTrue(updated)
+
+    refreshed = get_redaction(conn, redaction_id)
+    TC.assertIsNotNone(refreshed)
+    refreshed = cast(RedactionRecord, refreshed)
+    TC.assertEqual(refreshed.rule_fingerprint, "fp-v2")
+    conn.close()
+
+
+def test_update_redaction_with_active_flag(tmp_path: Path) -> None:
+    """update_redaction should handle active flag updates."""
+    conn = _make_connection(tmp_path)
+    prompt_id = _insert_prompt(conn)
+
+    redaction_id = create_redaction(
+        conn,
+        RedactionCreate(
+            file_id=None,
+            prompt_id=prompt_id,
+            rule_id=None,
+            rule_fingerprint="fp-active",
+        ),
+    )
+
+    # Deactivate
+    updated = update_redaction(conn, redaction_id, active=False)
+    TC.assertTrue(updated)
+
+    refreshed = get_redaction(conn, redaction_id)
+    TC.assertIsNotNone(refreshed)
+    refreshed = cast(RedactionRecord, refreshed)
+    TC.assertEqual(refreshed.active, 0)
+
+    # Reactivate
+    updated = update_redaction(conn, redaction_id, active=True)
+    TC.assertTrue(updated)
+
+    refreshed = get_redaction(conn, redaction_id)
+    TC.assertIsNotNone(refreshed)
+    refreshed = cast(RedactionRecord, refreshed)
+    TC.assertEqual(refreshed.active, 1)
+    conn.close()
+
+
 def test_create_redaction_minimal(tmp_path: Path) -> None:
     """create_redaction should insert minimal redaction with defaults."""
     conn = _make_connection(tmp_path)
