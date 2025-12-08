@@ -77,3 +77,28 @@ class TestValidationErrorPaths:
         TC.assertEqual(result["type"], "event_msg")
         TC.assertEqual(result["timestamp"], "2025-12-06T10:00:00Z")
         TC.assertEqual(result["payload"], {"key": "value"})
+
+    def test_validate_event_type_field_whitespace_only(self) -> None:
+        """validate_event should reject whitespace-only type field."""
+        with pytest.raises(EventValidationError, match="must be a non-empty string"):
+            validate_event({"type": "   "})
+
+    def test_validate_event_payload_list(self) -> None:
+        """validate_event should reject list payload."""
+        with pytest.raises(EventValidationError, match="must be a JSON object"):
+            validate_event({"type": "test", "payload": [1, 2, 3]})
+
+    def test_validate_event_timestamp_list(self) -> None:
+        """validate_event should reject list timestamp."""
+        with pytest.raises(EventValidationError, match="must be a string or null"):
+            validate_event({"type": "test", "timestamp": ["2025-01-01"]})
+
+    def test_validate_event_metadata_list_normalized(self) -> None:
+        """validate_event should normalize list metadata to empty dict."""
+        result = validate_event({"type": "test", "metadata": [1, 2, 3]})
+        TC.assertEqual(result["metadata"], {})
+
+    def test_validate_event_payload_none_normalized(self) -> None:
+        """validate_event should normalize None payload to empty dict."""
+        result = validate_event({"type": "test", "payload": None})
+        TC.assertEqual(result["payload"], {})

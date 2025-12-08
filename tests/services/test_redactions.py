@@ -352,6 +352,219 @@ def test_insert_prompt_raises_when_file_id_missing() -> None:
     dummy.close()
 
 
+def test_create_redaction_minimal(tmp_path: Path) -> None:
+    """create_redaction should insert minimal redaction with defaults."""
+    conn = _make_connection(tmp_path)
+    prompt_id = _insert_prompt(conn)
+
+    redaction_id = create_redaction(
+        conn,
+        RedactionCreate(
+            file_id=None,
+            prompt_id=prompt_id,
+            rule_id=None,
+            rule_fingerprint="fp-minimal",
+        ),
+    )
+
+    TC.assertGreater(redaction_id, 0)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT prompt_id, rule_fingerprint FROM redactions WHERE id = ?",
+        (redaction_id,),
+    )
+    row = cursor.fetchone()
+    TC.assertIsNotNone(row)
+    TC.assertEqual(row[0], prompt_id)
+    TC.assertEqual(row[1], "fp-minimal")
+    conn.close()
+
+
+def test_create_redaction_all_fields(tmp_path: Path) -> None:
+    """create_redaction should persist all provided fields."""
+    conn = _make_connection(tmp_path)
+    file_id = conn.execute(
+        "INSERT INTO files (path) VALUES (?)", ("test.jsonl",)
+    ).lastrowid
+    if file_id is None:
+        TC.fail("Failed to insert file")
+    file_id = int(file_id)
+    prompt_id = _insert_prompt(conn)
+
+    redaction_id = create_redaction(
+        conn,
+        RedactionCreate(
+            file_id=file_id,
+            prompt_id=prompt_id,
+            rule_id=None,
+            rule_fingerprint="fp-complete",
+            field_path="payload.message",
+            reason="contains_pii",
+            actor="redactor",
+            session_file_path="2025/12/test.jsonl",
+        ),
+    )
+
+    TC.assertGreater(redaction_id, 0)
+
+    # Verify all fields were stored
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT file_id, prompt_id, rule_id, rule_fingerprint, "
+        "field_path, reason, actor, session_file_path "
+        "FROM redactions WHERE id = ?",
+        (redaction_id,),
+    )
+    row = cursor.fetchone()
+    TC.assertIsNotNone(row)
+    TC.assertEqual(row[0], file_id)
+    TC.assertEqual(row[1], prompt_id)
+    TC.assertIsNone(row[2])
+    TC.assertEqual(row[3], "fp-complete")
+    TC.assertEqual(row[4], "payload.message")
+    TC.assertEqual(row[5], "contains_pii")
+    TC.assertEqual(row[6], "redactor")
+    TC.assertEqual(row[7], "2025/12/test.jsonl")
+    conn.close()
+
+
+def test_list_redactions_filtering(tmp_path: Path) -> None:
+    """list_redactions should filter by prompt_id correctly."""
+    conn = _make_connection(tmp_path)
+
+    # Insert two files/prompts
+    file_id_1 = conn.execute(
+        "INSERT INTO files (path) VALUES (?)", ("test1.jsonl",)
+    ).lastrowid
+    if file_id_1 is None:
+        TC.fail("Failed to insert file 1")
+    file_id_1 = int(file_id_1)
+
+    file_id_2 = conn.execute(
+        "INSERT INTO files (path) VALUES (?)", ("test2.jsonl",)
+    ).lastrowid
+    if file_id_2 is None:
+        TC.fail("Failed to insert file 2")
+    file_id_2 = int(file_id_2)
+
+    prompt_id_1 = conn.execute(
+        "INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json) "
+        "VALUES (?, 1, 't0', 'test1', '{}')",
+        (file_id_1,),
+    ).lastrowid
+    if prompt_id_1 is None:
+        TC.fail("Failed to insert prompt 1")
+    prompt_id_1 = int(prompt_id_1)
+
+    prompt_id_2 = conn.execute(
+        "INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json) "
+        "VALUES (?, 1, 't0', 'test2', '{}')",
+        (file_id_2,),
+    ).lastrowid
+    if prompt_id_2 is None:
+        TC.fail("Failed to insert prompt 2")
+    prompt_id_2 = int(prompt_id_2)
+
+    # Create redactions for both prompts
+    create_redaction(
+        conn,
+        RedactionCreate(
+            file_id=None,
+            prompt_id=prompt_id_1,
+            rule_id=None,
+            rule_fingerprint="fp1",
+        ),
+    )
+    create_redaction(
+        conn,
+        RedactionCreate(
+            file_id=None,
+            prompt_id=prompt_id_2,
+            rule_id=None,
+            rule_fingerprint="fp2",
+        ),
+    )
+
+    # List all
+    all_records = list_redactions(conn)
+    TC.assertEqual(len(all_records), 2)
+
+    # Filter by prompt_id_1
+    filtered = list_redactions(conn, prompt_id=prompt_id_1)
+    TC.assertEqual(len(filtered), 1)
+    TC.assertEqual(filtered[0].prompt_id, prompt_id_1)
+
+    # Filter by prompt_id_2
+    filtered = list_redactions(conn, prompt_id=prompt_id_2)
+    TC.assertEqual(len(filtered), 1)
+    TC.assertEqual(filtered[0].prompt_id, prompt_id_2)
+
+    conn.close()
+
+
+def test_update_redaction_various_fields(tmp_path: Path) -> None:
+    """update_redaction should handle updating different field combinations."""
+    conn = _make_connection(tmp_path)
+
+    # Insert file and prompt
+    file_id = conn.execute(
+        "INSERT INTO files (path) VALUES (?)", ("test.jsonl",)
+    ).lastrowid
+    if file_id is None:
+        TC.fail("Failed to insert file")
+    file_id = int(file_id)
+    prompt_id = conn.execute(
+        "INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json) "
+        "VALUES (?, 1, 't0', 'test', '{}')",
+        (file_id,),
+    ).lastrowid
+    if prompt_id is None:
+        TC.fail("Failed to insert prompt")
+    prompt_id = int(prompt_id)
+
+    redaction_id = create_redaction(
+        conn,
+        RedactionCreate(
+            file_id=None,
+            prompt_id=prompt_id,
+            rule_id=None,
+            rule_fingerprint="fp-update",
+            reason="initial_reason",
+            actor="original_actor",
+        ),
+    )
+
+    # Update reason only
+    updated = update_redaction(conn, redaction_id, reason="updated_reason")
+    TC.assertTrue(updated)
+
+    # Update actor only
+    updated = update_redaction(conn, redaction_id, actor="new_actor")
+    TC.assertTrue(updated)
+
+    # Update multiple fields
+    updated = update_redaction(
+        conn,
+        redaction_id,
+        reason="final_reason",
+        actor="final_actor",
+        field_path="new.path",
+    )
+    TC.assertTrue(updated)
+
+    # Verify updates
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT reason, actor, field_path FROM redactions WHERE id = ?", (redaction_id,)
+    )
+    row = cursor.fetchone()
+    TC.assertEqual(row[0], "final_reason")
+    TC.assertEqual(row[1], "final_actor")
+    TC.assertEqual(row[2], "new.path")
+
+    conn.close()
+
+
 def test_insert_prompt_raises_when_prompt_id_missing() -> None:
     """_insert_prompt should raise when prompt insert does not return an id."""
 
