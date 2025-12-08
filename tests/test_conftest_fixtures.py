@@ -191,9 +191,7 @@ def test_db_connection_has_tables(
 ) -> None:
     """db_connection should have schema tables created."""
     cursor = db_connection.cursor()
-    cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    )
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
     tables = cursor.fetchall()
     TC.assertGreater(len(tables), 0)
 
@@ -203,9 +201,7 @@ def test_db_connection_has_required_tables(
 ) -> None:
     """db_connection should have files, prompts, messages tables."""
     cursor = db_connection.cursor()
-    cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    )
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
     tables = [row[0] for row in cursor.fetchall()]
     # Check for at least the core tables
     TC.assertIn("files", tables)
@@ -225,9 +221,7 @@ def test_fresh_sqlite_db_has_current_schema(
 ) -> None:
     """fresh_sqlite_db should have current schema tables."""
     cursor = fresh_sqlite_db.cursor()
-    cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    )
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
     tables = [row[0] for row in cursor.fetchall()]
     TC.assertGreater(len(tables), 0)
 
@@ -245,9 +239,7 @@ def test_old_schema_sqlite_db_has_tables(
 ) -> None:
     """old_schema_sqlite_db should have old schema tables."""
     cursor = old_schema_sqlite_db.cursor()
-    cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    )
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
     tables = [row[0] for row in cursor.fetchall()]
     # Old schema should have these tables
     TC.assertIn("files", tables)
