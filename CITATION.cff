@@ -1,0 +1,33 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: AI Log Trail
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Lauren
+    family-names: Parlett
+    orcid: 'https://orcid.org/0000-0003-1240-4566'
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.17728973
+    description: Zenodo
+repository-code: 'https://github.com/lparlett/ai-log-trail'
+abstract: >-
+  A GitHub repository for the development of a flexible
+  framework for capturing, analyzing, and sharing AI agent
+  interactions while maintaining privacy and auditability.
+  Supporting multiple AI agents and workflows, this tool
+  helps organizations track and understand their AI usage
+  patterns.
+keywords:
+  - AI
+  - tranparency
+  - Ethical AI
+license: MIT
+commit: 3147abc
+version: 0.4.1
+date-released: '2025-11-26'

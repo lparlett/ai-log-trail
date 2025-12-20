@@ -22,6 +22,8 @@ from src.services.ingest import (
     SessionSummary,
 )
 
+__all__: list[str] = ["SessionDiscoveryError", "SessionSummary", "load_config", "main"]
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Builds the argument parser for the CLI.

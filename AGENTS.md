@@ -252,7 +252,7 @@ ProcessingError(
 * Summarize outputs instead of printing large data blocks.
 * When uncertain, ask clarifying questions rather than guessing.
 * Maintain a factual, explanatory tone.
-* Do not pause to announce time/effort concerns; complete the requested change unless a true blocker arises.
+* Do not pause to announce time/effort concerns; once the user says "proceed," execute the agreed plan end-to-end unless a true blocker arises or a destructive action needs approval.
 * Prefer fixing lint/type/test failures over adding suppressions; only suppress checks with explicit user approval.
 
 ---

@@ -1,4 +1,4 @@
-﻿"""Tests for db_utils and event_handlers helpers (AI-assisted by Codex GPT-5)."""
+"""Tests for db_utils and event_handlers helpers (AI-assisted by Codex GPT-5)."""
 
 # pylint: disable=import-error
 
@@ -17,6 +17,7 @@ from src.parsers.handlers.db_utils import (
     FunctionCallOutputUpdate,
     PromptInsert,
     SessionInsert,
+    SAFE_COLUMNS,
     UnsafeColumnError,
     extract_session_details,
     extract_token_fields,
@@ -86,6 +87,67 @@ def test_safe_value_allowlist() -> None:
     TC.assertEqual(safe_value("message", "ok"), "ok")
     with pytest.raises(UnsafeColumnError):
         validate_safe_column("bad_column")
+
+
+def test_validate_safe_column_exhaustive_and_case_sensitive() -> None:
+    """All SAFE_COLUMNS should pass; unknown and mixed-case should fail."""
+
+    for column in SAFE_COLUMNS:
+        validate_safe_column(column)
+
+    for column in ("Message", "file_id", "prompt_id", "drop table"):
+        with pytest.raises(UnsafeColumnError):
+            validate_safe_column(column)
+
+    # Regression: ensure user-supplied values containing SQL do not alter queries
+    value = "ok'; DROP TABLE prompts;--"
+    TC.assertEqual(safe_value("message", value), value)
+
+
+def test_function_call_tracker_resolve_branches() -> None:
+    """FunctionCallTracker should resolve by id, then queue, then None."""
+
+    tracker = FunctionCallTracker()
+    tracker.register("id-1", 10)
+    tracker.register(None, 20)
+
+    TC.assertEqual(tracker.resolve("id-1"), 10)
+    TC.assertEqual(tracker.resolve(None), 20)
+    TC.assertIsNone(tracker.resolve("missing"))
+
+
+def test_function_call_tracker_prefers_id_over_queue() -> None:
+    """Resolve should prefer explicit id even when queue has entries."""
+
+    tracker = FunctionCallTracker()
+    tracker.register(None, 1)
+    tracker.register("abc", 2)
+
+    TC.assertEqual(tracker.resolve("abc"), 2)
+    TC.assertEqual(tracker.queue, [1])
+
+
+def test_handle_event_msg_unknown_subtype(tmp_path: Path) -> None:
+    """Unknown event_msg subtype should not alter counts."""
+
+    conn = _make_connection(tmp_path)
+    file_id, prompt_id = _create_file_and_prompt(conn, "## My request for Codex:\nTest")
+    deps = _deps_with_real_inserts()
+    counts: dict[str, int] = {"agent_reasoning_messages": 0, "token_messages": 0}
+
+    event = EventContext(
+        conn=conn,
+        file_id=file_id,
+        prompt_id=prompt_id,
+        timestamp="t1",
+        payload={"type": "unknown"},
+        raw_event={"type": "event_msg"},
+        counts=counts,
+    )
+    handle_event_msg(deps, event)
+    TC.assertEqual(counts["agent_reasoning_messages"], 0)
+    TC.assertEqual(counts["token_messages"], 0)
+    conn.close()
 
 
 def test_parse_and_extract_helpers() -> None:
@@ -159,15 +221,26 @@ def test_parse_and_extract_helpers() -> None:
         get_reasoning_text({"summary": [{"text": "from summary"}]}), "from summary"
     )
     TC.assertEqual(get_reasoning_text({"content": "fallback"}), "fallback")
+    TC.assertIsNone(get_reasoning_text({}))
     TC.assertIsNone(get_reasoning_text({"summary": []}))
     TC.assertIsNone(extract_tag_value("no tags here", "cwd"))
     TC.assertIsNone(extract_tag_value("<cwd>missing end", "cwd"))
+    TC.assertEqual(
+        extract_tag_value("<cwd>nested<cwd>inner</cwd></cwd>", "cwd"),
+        "nested<cwd>inner",
+    )
     TC.assertEqual(parse_prompt_message(None), (None, None, None))
+    TC.assertEqual(parse_prompt_message(""), (None, None, None))
+    TC.assertEqual(parse_prompt_message("No headers here"), (None, None, None))
 
 
 def test_parse_prompt_message_handles_state_resets() -> None:
     """Ensure open tabs parsing stops on blanks or new headers."""
-    message = "## Open tabs:\n- tab1\n\n## My request for Codex:\nLine1\n## Other header:\nIgnored\n"
+    message = (
+        "## Open tabs:\n- tab1\n\n"
+        "## My request for Codex:\nLine1\n"
+        "## Other header:\nIgnored\n"
+    )
     active_file, open_tabs, my_request = parse_prompt_message(message)
     TC.assertIsNone(active_file)
     open_tabs_value = open_tabs or ""
@@ -323,6 +396,20 @@ def test_insert_helpers_persist_rows(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_database_schema_enforces_foreign_keys(tmp_path: Path) -> None:
+    """ensure_schema should enforce FK constraints and be idempotent."""
+
+    conn = get_connection(tmp_path / "fk.sqlite")
+    ensure_schema(conn)
+    ensure_schema(conn)  # idempotent
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO prompts (file_id, prompt_index) VALUES (?, ?)",
+            (999, 1),
+        )
+    conn.close()
+
+
 def _deps_with_real_inserts() -> EventHandlerDeps:
     """Create EventHandlerDeps wired to real db_utils inserts."""
 
@@ -403,6 +490,28 @@ def test_handle_event_msg_branches(tmp_path: Path) -> None:
 
     TC.assertEqual(counts["token_messages"], 1)
     TC.assertEqual(counts["agent_reasoning_messages"], 3)
+    conn.close()
+
+
+def test_handle_event_msg_unknown_type_no_op(tmp_path: Path) -> None:
+    """Unknown subtype should not increment counts or crash."""
+
+    conn = _make_connection(tmp_path)
+    file_id, prompt_id = _create_file_and_prompt(conn, "## My request for Codex:\nTest")
+    deps = _deps_with_real_inserts()
+    counts: dict[str, int] = {"agent_reasoning_messages": 0, "token_messages": 0}
+    event = EventContext(
+        conn=conn,
+        file_id=file_id,
+        prompt_id=prompt_id,
+        timestamp="t0",
+        payload={"type": "unknown"},
+        raw_event={"type": "event_msg"},
+        counts=counts,
+    )
+    handle_event_msg(deps, event)
+    TC.assertEqual(counts["agent_reasoning_messages"], 0)
+    TC.assertEqual(counts["token_messages"], 0)
     conn.close()
 
 
@@ -543,4 +652,59 @@ def test_handle_response_item_event_calls_and_outputs(tmp_path: Path) -> None:
 
     outputs = conn.execute("SELECT output FROM function_calls ORDER BY id").fetchall()
     TC.assertEqual({row[0] for row in outputs}, {"done", "updated"})
+    conn.close()
+
+
+def test_handle_response_item_event_unknown_subtype(tmp_path: Path) -> None:
+    """handle_response_item_event should gracefully skip unknown subtypes."""
+    conn = _make_connection(tmp_path)
+    file_id, prompt_id = _create_file_and_prompt(conn, "## Test")
+    deps = _deps_with_real_inserts()
+    tracker = FunctionCallTracker()
+    counts: dict[str, int] = {"function_calls": 0}
+
+    # Unknown subtype should be silently ignored
+    handle_response_item_event(
+        deps,
+        EventContext(
+            conn=conn,
+            file_id=file_id,
+            prompt_id=prompt_id,
+            timestamp="t0",
+            payload={"type": "unknown_type", "data": "some value"},
+            raw_event={"type": "response_item"},
+            counts=counts,
+        ),
+        tracker,
+    )
+
+    # No function calls should be created
+    TC.assertEqual(counts["function_calls"], 0)
+    conn.close()
+
+
+def test_record_agent_reasoning_sources(tmp_path: Path) -> None:
+    """_record_agent_reasoning should store different sources."""
+
+    conn = _make_connection(tmp_path)
+    file_id, prompt_id = _create_file_and_prompt(conn, "## My request for Codex:\nTest")
+    deps = _deps_with_real_inserts()
+    counts: dict[str, int] = {"agent_reasoning_messages": 0}
+
+    for subtype in ("agent_reasoning", "turn_aborted", "agent_message"):
+        handle_event_msg(
+            deps,
+            EventContext(
+                conn=conn,
+                file_id=file_id,
+                prompt_id=prompt_id,
+                timestamp="t2",
+                payload={"type": subtype, "text": subtype},
+                raw_event={"type": "event_msg"},
+                counts=counts,
+            ),
+        )
+    TC.assertEqual(
+        conn.execute("SELECT COUNT(*) FROM agent_reasoning_messages").fetchone()[0], 3
+    )
     conn.close()

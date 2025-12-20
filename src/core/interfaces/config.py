@@ -9,6 +9,8 @@ from typing import Any, ClassVar, Dict, Type
 from ..models.base_types import AgentFeatures
 from ..models.config_data import AgentConfigData
 
+__all__ = ["AgentConfig", "AgentFeatures"]
+
 
 class AgentConfig(ABC):
     """Base configuration for an AI agent.

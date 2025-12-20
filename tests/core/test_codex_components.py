@@ -86,6 +86,18 @@ def test_codex_config_validate(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         CodexConfig(root_path=missing_root).validate()
 
+    cfg_dict = cfg.to_dict()
+    TC.assertEqual(cfg_dict["type"], "codex")
+    TC.assertEqual(cfg_dict["root"], str(valid_root))
+    TC.assertTrue(cfg_dict["features"]["streaming"])
+
+    restored = CodexConfig.from_dict(cfg_dict)
+    TC.assertEqual(restored.agent_type, "codex")
+    TC.assertEqual(restored.root_path, valid_root)
+    TC.assertEqual(
+        restored.features.supports_streaming, cfg.features.supports_streaming
+    )
+
 
 def test_agent_config_data_validation() -> None:
     """AgentConfigData should reject empty agent_type."""
@@ -104,16 +116,20 @@ def test_agent_registry_register_and_get(tmp_path: Path) -> None:
         agent_type = "dummy"
 
         def __init__(self, root_path: Path) -> None:
+            """Initialize with root path."""
             super().__init__("dummy", root_path, AgentFeatures())
 
         def validate(self) -> None:
+            """No-op validation."""
             return None
 
         def to_dict(self) -> dict[str, str]:
+            """Serialize to dictionary."""
             return {"root": str(self.root_path)}
 
         @classmethod
         def from_dict(cls, data: dict[str, str]) -> "DummyConfig":
+            """Deserialize from dictionary."""
             return cls(Path(data["root"]))
 
     AgentRegistry.register(DummyConfig)

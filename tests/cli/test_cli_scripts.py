@@ -190,6 +190,18 @@ def test_group_session_describe_additional_payloads() -> None:
     desc = group_session.describe_event(token_event)
     TC.assertIn("secondary", desc)
 
+    # Test token_count with non-dict rate_limits
+    bad_token_event = {
+        "type": "event_msg",
+        "timestamp": "t",
+        "payload": {
+            "type": "token_count",
+            "rate_limits": "not a dict",
+        },
+    }
+    bad_desc = group_session.describe_event(bad_token_event)
+    TC.assertIn("token_count", bad_desc)
+
     reasoning_summary = {
         "type": "response_item",
         "timestamp": "t",
@@ -256,7 +268,10 @@ def test_group_session_write_report_and_reconfigure(
     TC.assertTrue(output_path.exists())
 
     class FakeStdout:
+        """Stub stdout that raises on reconfigure."""
+
         def reconfigure(self, encoding: str) -> None:  # pylint: disable=unused-argument
+            """Simulate stdout that cannot be reconfigured."""
             raise ValueError("cannot reconfigure")
 
     fake_stdout = FakeStdout()
@@ -324,6 +339,45 @@ def test_group_session_main_with_output_override(
 
     group_session.main()
     TC.assertTrue(out_path.exists())
+
+
+def test_group_session_main_error_without_output_path(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """group_session.main should handle errors gracefully when output_path is None."""
+
+    def mock_load_config() -> SessionsConfig:
+        raise ConfigError("Config failed")
+
+    monkeypatch.setattr(group_session, "load_config", mock_load_config)
+    monkeypatch.setattr(sys, "argv", ["prog"])
+
+    group_session.main()
+    out = capsys.readouterr().out
+    TC.assertIn("Configuration error", out)
+
+
+def test_group_session_describe_turn_context_edge_cases() -> None:
+    """describe_event should handle turn_context event with missing/non-string cwd."""
+    # Event where event_type is "turn_context" with a dict payload (no cwd)
+    event = {
+        "type": "turn_context",
+        "timestamp": "2025-10-31T10:00:00Z",
+        "payload": {"other_field": "value"},
+    }
+    desc = group_session.describe_event(event)
+    # Should have the header but no cwd line
+    TC.assertIn("turn_context", desc)
+
+    # Event where payload_type is "turn_context" via non-matching event_type
+    # This tests the `if payload_type == "turn_context"` path (line 69)
+    event2 = {
+        "type": "unknown_event_type",
+        "timestamp": "2025-10-31T10:00:01Z",
+        "payload": {"type": "turn_context", "cwd": "/some/path"},
+    }
+    desc2 = group_session.describe_event(event2)
+    TC.assertIn("cwd: /some/path", desc2)
 
 
 def test_ingest_resolve_runtime_options_debug_limit() -> None:
@@ -617,20 +671,25 @@ def test_migrate_run_dry_run_calls_counts(
     """run_dry_run should call table count helpers and close connections."""
 
     class _Conn:
+        """Lightweight connection stub tracking closed state."""
+
         def __init__(self) -> None:
             self.closed = False
 
         def close(self) -> None:
+            """Mark stub connection as closed."""
             self.closed = True
 
     sqlite_conn = _Conn()
     pg_conn = _Conn()
 
     def _open_sqlite(_path: Path) -> _Conn:
+        """Return sqlite stub for dry-run test."""
         sqlite_conn.closed = False
         return sqlite_conn
 
     def _open_postgres(_dsn: str) -> _Conn:
+        """Return postgres stub for dry-run test."""
         pg_conn.closed = False
         return pg_conn
 
@@ -677,16 +736,21 @@ def test_migrate_open_postgres_success(monkeypatch: pytest.MonkeyPatch) -> None:
     """_open_postgres should return connection when psycopg2 is present."""
 
     class DummyPsycoConn:
+        """Stub psycopg2 connection with autocommit flag."""
+
         def __init__(self) -> None:
             self.autocommit = False
 
     class DummyPsyco:
+        """Stub psycopg2 module returning the stub connection."""
+
         def __init__(self) -> None:
             self.connected = DummyPsycoConn()
 
         def connect(
             self, _dsn: str = "", **_kwargs: Any
         ) -> DummyPsycoConn:  # pylint: disable=unused-argument
+            """Return shared DummyPsycoConn instance."""
             return self.connected
 
     dummy = DummyPsyco()
@@ -729,6 +793,8 @@ def test_migrate_table_counts_postgres_missing() -> None:
     """_table_counts_postgres should set zero when table missing."""
 
     class Cursor:
+        """Cursor stub tracking state to simulate missing table."""
+
         def __init__(self) -> None:
             self.state = 0
 
@@ -741,13 +807,18 @@ def test_migrate_table_counts_postgres_missing() -> None:
             return None
 
         def execute(self, _stmt: str, _params: Any | None = None) -> None:
+            """Increment state to simulate execution."""
             self.state += 1
 
         def fetchone(self) -> tuple[int]:
+            """Return a single-row count result."""
             return (0,)
 
     class Conn:
+        """Connection stub returning the cursor."""
+
         def cursor(self) -> Cursor:
+            """Return a new Cursor stub."""
             return Cursor()
 
     counts = migrate_sqlite_to_postgres._table_counts_postgres(
@@ -760,6 +831,8 @@ def test_migrate_table_counts_postgres_existing() -> None:
     """_table_counts_postgres should return counts when table exists."""
 
     class Cursor:
+        """Cursor stub that returns different counts across calls."""
+
         def __init__(self) -> None:
             self.calls = 0
 
@@ -772,15 +845,20 @@ def test_migrate_table_counts_postgres_existing() -> None:
             return None
 
         def execute(self, _stmt: str, _params: Any | None = None) -> None:
+            """Increment call count per execution."""
             self.calls += 1
 
         def fetchone(self) -> tuple[int]:
+            """Return simulated count values by call order."""
             if self.calls == 1:
                 return (1,)
             return (3,)
 
     class Conn:
+        """Connection stub returning counting cursor."""
+
         def cursor(self) -> Cursor:
+            """Return a new Cursor stub."""
             return Cursor()
 
     counts = migrate_sqlite_to_postgres._table_counts_postgres(
@@ -833,29 +911,40 @@ def test_migrate_copy_table_flushes_batches(monkeypatch: pytest.MonkeyPatch) -> 
     """_copy_table should flush batches when batch_size threshold is met."""
 
     class DummyCursor:
+        """Cursor stub returning fixed rows and description."""
+
         description = [("id",), ("val",)]
 
         def __init__(self) -> None:
             self._rows = [(1, "a"), (2, "b")]
 
         def execute(self, stmt: str) -> None:  # pylint: disable=unused-argument
+            """No-op execute for stub cursor."""
             return None
 
         def fetchall(self) -> list[tuple[int, str]]:
+            """Return preset rows."""
             return self._rows
 
     class DummySqlite:
+        """SQLite connection stub returning DummyCursor."""
+
         def cursor(self) -> DummyCursor:
+            """Return a new DummyCursor."""
             return DummyCursor()
 
     class DummySQL:
+        """psycopg2.sql.SQL-compatible stub supporting join/format."""
+
         def __init__(self, template: str) -> None:
             self.template = template
 
         def join(self, iterable: Iterator[str]) -> "DummySQL":
+            """Return a new DummySQL with joined identifiers."""
             return DummySQL(", ".join(iterable))
 
         def format(self, *_args: Any, **_kwargs: Any) -> "DummySQL":
+            """Return self; formatting is not simulated."""
             return self
 
     dummy_sql_module = types.SimpleNamespace(
@@ -868,6 +957,7 @@ def test_migrate_copy_table_flushes_batches(monkeypatch: pytest.MonkeyPatch) -> 
     flushed = {"calls": 0}
 
     def dummy_execute_values(*_args: Any, **_kwargs: Any) -> None:
+        """Count batch flush calls."""
         flushed["calls"] += 1
 
     monkeypatch.setitem(
@@ -877,6 +967,8 @@ def test_migrate_copy_table_flushes_batches(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     class DummyPgCursor:
+        """Postgres cursor stub supporting context management."""
+
         def __enter__(self) -> "DummyPgCursor":
             return self
 
@@ -889,10 +981,14 @@ def test_migrate_copy_table_flushes_batches(monkeypatch: pytest.MonkeyPatch) -> 
             return None
 
     class DummyPg:
+        """Postgres connection stub that returns DummyPgCursor."""
+
         def cursor(self) -> DummyPgCursor:
+            """Return a new DummyPgCursor."""
             return DummyPgCursor()
 
         def commit(self) -> None:
+            """Commit stub (no-op)."""
             return None
 
     sqlite_conn_any: Any = DummySqlite()
@@ -944,10 +1040,12 @@ def test_migrate_helpers_cover_counts(
         def execute(
             self, stmt: str, _params: Any | None = None
         ) -> None:  # pylint: disable=unused-argument
+            """Track executed statements for assertions."""
             self.state += 1
             self.executed.append(stmt)
 
         def fetchone(self) -> tuple[int, ...]:
+            """Return simulated count values."""
             if self.state == 1:
                 return (1,)
             return (0,)
@@ -956,6 +1054,7 @@ def test_migrate_helpers_cover_counts(
         """Connection stub yielding _PgCursor."""
 
         def cursor(self) -> _PgCursor:
+            """Return a new _PgCursor stub."""
             return _PgCursor()
 
         def __enter__(self) -> "_PgConn":
@@ -982,29 +1081,40 @@ def test_migrate_helpers_cover_counts(
 
     # _copy_table via stubs (monkeypatch psycopg2 imports)
     class DummyCursor:
+        """Cursor stub returning two rows."""
+
         description = [("id",), ("name",)]
 
         def __init__(self) -> None:
             self._fetched = False
 
         def execute(self, stmt: str) -> None:  # pylint: disable=unused-argument
+            """No-op execute for stub cursor."""
             return None
 
         def fetchall(self) -> list[tuple[int, str]]:
+            """Return preset rows for copying."""
             return [(1, "a"), (2, "b")]
 
     class DummySqlite:
+        """SQLite stub returning DummyCursor."""
+
         def cursor(self) -> DummyCursor:
+            """Return a new DummyCursor stub."""
             return DummyCursor()
 
     class DummySQL:
+        """psycopg2.sql.SQL stub used for template joins."""
+
         def __init__(self, template: str) -> None:
             self.template = template
 
         def format(self, *_args: Any, **_kwargs: Any) -> "DummySQL":
+            """Return self without formatting."""
             return self
 
         def join(self, iterable: Iterator[str]) -> "DummySQL":
+            """Return a new DummySQL with joined values."""
             joined = ", ".join(iterable)
             return DummySQL(joined)
 
@@ -1032,9 +1142,10 @@ def test_migrate_helpers_cover_counts(
         _pg_conn: Any,
         _table: str,
         _columns: Any,
-        rows: list[tuple],
+        rows: list[tuple[Any, ...]],
         _execute_values: Any,
     ) -> None:
+        """Accumulate row counts to assert batch flushing."""
         batch_calls["count"] += len(rows)
 
     monkeypatch.setattr(
@@ -1079,6 +1190,8 @@ def test_migrate_copy_all_tables_and_execute_batch(
     TC.assertEqual(calls["sync"], 2)
 
     class SQLHelper:
+        """psycopg2.sql helper stub for formatting tests."""
+
         def __init__(self, val: str) -> None:
             self.val = val
 
@@ -1086,9 +1199,11 @@ def test_migrate_copy_all_tables_and_execute_batch(
             return self.val
 
         def format(self, *_args: Any, **_kwargs: Any) -> "SQLHelper":
+            """Return self; used to mimic SQL composition."""
             return self
 
         def join(self, iterable: Iterator[str]) -> "SQLHelper":
+            """Join iterable into a comma-separated SQLHelper."""
             return SQLHelper(", ".join(iterable))
 
     dummy_sql_module = types.SimpleNamespace(
@@ -1108,6 +1223,8 @@ def test_migrate_copy_all_tables_and_execute_batch(
     )
 
     class DummyPgCursor:
+        """Postgres cursor stub recording executed statements."""
+
         def __init__(self) -> None:
             self.executed: list[Any] = []
 
@@ -1122,17 +1239,22 @@ def test_migrate_copy_all_tables_and_execute_batch(
         def execute(
             self, statement: Any, _params: Any | None = None
         ) -> None:  # pylint: disable=unused-argument
+            """Record executed statement for assertions."""
             self.executed.append(statement)
 
     class DummyPgConn:
+        """Postgres connection stub counting commits."""
+
         def __init__(self) -> None:
             self.cur = DummyPgCursor()
             self.commits = 0
 
         def cursor(self) -> DummyPgCursor:
+            """Return the shared cursor stub."""
             return self.cur
 
         def commit(self) -> None:
+            """Increment commit counter."""
             self.commits += 1
 
     pg_conn = DummyPgConn()
@@ -1149,6 +1271,8 @@ def test_migrate_invokes_ensure_and_copy(monkeypatch: pytest.MonkeyPatch) -> Non
     """migrate should call ensure_target_empty and copy helpers using stubs."""
 
     class DummyConn:
+        """Generic connection stub supporting context manager."""
+
         def __enter__(self) -> "DummyConn":
             return self
 
@@ -1161,12 +1285,15 @@ def test_migrate_invokes_ensure_and_copy(monkeypatch: pytest.MonkeyPatch) -> Non
             return None
 
         def cursor(self) -> "DummyConn":
+            """Return self as cursor stub."""
             return self
 
         def execute(self, stmt: Any) -> None:  # pylint: disable=unused-argument
+            """No-op execute for stub connection."""
             return None
 
         def close(self) -> None:
+            """Close stub connection."""
             return None
 
     dummy_sqlite = DummyConn()
@@ -1194,3 +1321,6 @@ def test_migrate_invokes_ensure_and_copy(monkeypatch: pytest.MonkeyPatch) -> Non
     migrate_sqlite_to_postgres.migrate(Path("source.sqlite"), "pg", batch_size=5)
     TC.assertEqual(calls["ensure"], 1)
     TC.assertEqual(calls["copy"], 1)
+
+
+# pylint: disable=too-many-lines

@@ -16,3 +16,6 @@ __pycache__/
 .coverage
 tests/htmlcov/
 coverage.xml
+
+# Report files
+reports/*.txt

@@ -8,6 +8,8 @@ from typing import ClassVar, Dict, Type
 
 from .base_types import AgentConfig, AgentFeatures
 
+__all__ = ["AgentConfigData", "AgentFeatures"]
+
 
 @dataclass  # pylint: disable=too-few-public-methods
 class AgentConfigData:

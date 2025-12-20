@@ -35,10 +35,10 @@ SQLite stays the default for single-user, local ingest, but we need a path to a 
 
 ### Issue bundle: v0.6.0 (Redaction baseline + CLI)
 
-- [ ] Add `redactions` table (prompt/field overrides: replacement text, actor, timestamp, reason).
-- [ ] Add configurable redaction rules (regex / `[redact ...]`) via YAML/JSON.
-- [ ] CLI: list/add/remove redactions; ensure exports apply redactions by default.
-- [ ] Tests for redaction application and rule precedence.
+- [X] Add `redactions` table (prompt/field overrides: replacement text, actor, timestamp, reason) with CRUD helpers. (v0.6.0 / #5)
+- [X] Add configurable redaction rules (regex / `[redact ...]`) via YAML/JSON.
+- [X] CLI: list/add/remove redactions; ensure exports apply redactions by default.
+- [X] Tests for redaction application and rule precedence.
 
 ### Issue bundle: v0.8.0 (Reporting CLI + filters)
 

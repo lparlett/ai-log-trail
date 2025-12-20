@@ -9,20 +9,18 @@ AI-assisted: Updated with Codex (GPT-5).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import importlib
 import os
 from pathlib import Path
-import sys
+from typing import Any
 
-if sys.version_info >= (3, 11):
-    import tomllib
+try:
+    _toml_module = importlib.import_module("tomllib")
+except ModuleNotFoundError:  # pragma: no cover - exercised via test shim
+    _toml_module = importlib.import_module("tomli")
 
-    _toml_loads = tomllib.loads
-    _TOMLDecodeError = tomllib.TOMLDecodeError
-else:
-    import tomli
-
-    _toml_loads = tomli.loads
-    _TOMLDecodeError = tomli.TOMLDecodeError
+_toml_loads = _toml_module.loads
+_TOMLDecodeError = _toml_module.TOMLDecodeError
 
 
 class ConfigError(RuntimeError):
@@ -98,7 +96,7 @@ def load_config(config_path: Path | None = None) -> SessionsConfig:
     )
 
 
-def _load_batch_size(ingest_config: dict | None) -> int:
+def _load_batch_size(ingest_config: dict[str, Any] | None) -> int:
     """Return validated ingest batch size."""
 
     batch_size = 1000
@@ -114,38 +112,16 @@ def _load_batch_size(ingest_config: dict | None) -> int:
 
 
 def _load_database_config(
-    ingest_config: dict | None, database_table: dict | None
+    ingest_config: dict[str, Any] | None, database_table: dict[str, Any] | None
 ) -> DatabaseConfig:
     """Load database configuration with sensible defaults."""
 
-    backend = "sqlite"
-    sqlite_path = Path("reports") / "session_data.sqlite"
-    postgres_dsn: str | None = None
-    user_supplied_sqlite = False
+    sqlite_path, user_supplied_sqlite = _determine_sqlite_path(
+        ingest_config, database_table
+    )
+    backend, postgres_dsn = _determine_backend(database_table)
 
-    if isinstance(ingest_config, dict):
-        db_path = ingest_config.get("db_path")
-        if isinstance(db_path, str) and db_path.strip():
-            sqlite_path = Path(db_path)
-            user_supplied_sqlite = True
-
-    if isinstance(database_table, dict):
-        backend_value = database_table.get("backend")
-        if isinstance(backend_value, str) and backend_value.strip():
-            backend = backend_value.strip().lower()
-        dsn_value = database_table.get("postgres_dsn")
-        if isinstance(dsn_value, str) and dsn_value.strip():
-            postgres_dsn = dsn_value.strip()
-        sqlite_override = database_table.get("sqlite_path")
-        if isinstance(sqlite_override, str) and sqlite_override.strip():
-            sqlite_path = Path(sqlite_override)
-            user_supplied_sqlite = True
-
-    if backend not in {"sqlite", "postgres"}:
-        raise ConfigError("database.backend must be either 'sqlite' or 'postgres'.")
-
-    if backend == "postgres" and not postgres_dsn:
-        raise ConfigError("database.postgres_dsn is required when backend=postgres.")
+    _validate_backend(backend, postgres_dsn)
 
     sqlite_path = _validate_sqlite_path(
         sqlite_path,
@@ -159,21 +135,71 @@ def _load_database_config(
     )
 
 
-def _load_outputs_config(outputs_table: dict | None) -> OutputPaths:
+def _determine_sqlite_path(
+    ingest_config: dict[str, Any] | None, database_table: dict[str, Any] | None
+) -> tuple[Path, bool]:
+    """Return sqlite path and whether the user supplied it."""
+
+    sqlite_path = Path("reports") / "session_data.sqlite"
+    user_supplied = False
+
+    if isinstance(ingest_config, dict):
+        db_path = ingest_config.get("db_path")
+        if isinstance(db_path, str) and db_path.strip():
+            sqlite_path = Path(db_path)
+            user_supplied = True
+
+    if isinstance(database_table, dict):
+        sqlite_override = database_table.get("sqlite_path")
+        if isinstance(sqlite_override, str) and sqlite_override.strip():
+            sqlite_path = Path(sqlite_override)
+            user_supplied = True
+
+    return sqlite_path, user_supplied
+
+
+def _determine_backend(
+    database_table: dict[str, Any] | None,
+) -> tuple[str, str | None]:
+    """Return backend and optional Postgres DSN from the database table."""
+
+    backend = "sqlite"
+    postgres_dsn: str | None = None
+
+    if isinstance(database_table, dict):
+        backend_value = database_table.get("backend")
+        if isinstance(backend_value, str) and backend_value.strip():
+            backend = backend_value.strip().lower()
+        dsn_value = database_table.get("postgres_dsn")
+        if isinstance(dsn_value, str) and dsn_value.strip():
+            postgres_dsn = dsn_value.strip()
+
+    return backend, postgres_dsn
+
+
+def _validate_backend(backend: str, postgres_dsn: str | None) -> None:
+    """Validate backend choice and required DSN."""
+
+    if backend not in {"sqlite", "postgres"}:
+        raise ConfigError("database.backend must be either 'sqlite' or 'postgres'.")
+
+    if backend == "postgres" and not postgres_dsn:
+        raise ConfigError("database.postgres_dsn is required when backend=postgres.")
+
+
+def _load_outputs_config(outputs_table: dict[str, Any] | None) -> OutputPaths:
     """Load and validate output directory configuration."""
 
     reports_dir = Path("reports")
-    user_supplied_reports = False
     if isinstance(outputs_table, dict):
         reports_value = outputs_table.get("reports_dir")
         if isinstance(reports_value, str) and reports_value.strip():
             reports_dir = Path(reports_value)
-            user_supplied_reports = True
 
     resolved_reports_dir = _validate_existing_directory(
         reports_dir,
         "outputs.reports_dir",
-        create_if_missing=not user_supplied_reports,
+        create_if_missing=True,
     )
     return OutputPaths(reports_dir=resolved_reports_dir)
 
