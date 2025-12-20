@@ -91,7 +91,7 @@ def extract_tag_value(text: str, tag: str) -> str | None:
     return text[start_index:end_index].strip()
 
 
-def extract_session_details(prelude: list[dict]) -> dict[str, Any]:
+def extract_session_details(prelude: list[dict[str, Any]]) -> dict[str, Any]:
     """Derive session metadata from the prelude events."""
 
     details: dict[str, Any] = {
@@ -122,7 +122,7 @@ def extract_session_details(prelude: list[dict]) -> dict[str, Any]:
     return details
 
 
-def _extract_env_context(payload: dict, details: dict[str, Any]) -> None:
+def _extract_env_context(payload: dict[str, Any], details: dict[str, Any]) -> None:
     """Populate environment details from message payload."""
 
     content = payload.get("content")
@@ -146,7 +146,7 @@ def _extract_env_context(payload: dict, details: dict[str, Any]) -> None:
         )
 
 
-def extract_token_fields(payload: dict) -> dict[str, Any]:
+def extract_token_fields(payload: dict[str, Any]) -> dict[str, Any]:
     """Normalize token count payload for insertion."""
 
     primary = (
@@ -170,7 +170,7 @@ def extract_token_fields(payload: dict) -> dict[str, Any]:
     }
 
 
-def extract_turn_context(payload: dict) -> dict[str, Any]:
+def extract_turn_context(payload: dict[str, Any]) -> dict[str, Any]:
     """Normalize turn context payload for insertion."""
 
     sandbox = payload.get("sandbox_policy", {}) if isinstance(payload, dict) else {}
@@ -186,7 +186,7 @@ def extract_turn_context(payload: dict) -> dict[str, Any]:
     }
 
 
-def get_reasoning_text(payload: dict) -> str | None:
+def get_reasoning_text(payload: dict[str, Any]) -> str | None:
     """Extract reasoning text from payload if present."""
 
     text = payload.get("text")
@@ -258,7 +258,7 @@ class SessionInsert:
 
     conn: Any
     file_id: int
-    prelude: list[dict]
+    prelude: list[dict[str, Any]]
 
 
 @dataclass
@@ -270,7 +270,7 @@ class PromptInsert:
     prompt_index: int
     timestamp: str | None
     message: str
-    raw: dict
+    raw: dict[str, Any]
 
 
 @dataclass
@@ -281,8 +281,8 @@ class EventInsert:
     file_id: int
     prompt_id: int
     timestamp: str | None
-    payload: dict
-    raw: dict
+    payload: dict[str, Any]
+    raw: dict[str, Any]
 
 
 def insert_event(ctx: EventInsert) -> None:
@@ -334,30 +334,44 @@ class FunctionCallOutputUpdate:
     conn: Any
     row_id: int
     timestamp: str | None
-    payload: dict
-    raw: dict
+    payload: dict[str, Any]
+    raw: dict[str, Any]
 
 
 def insert_session(context: SessionInsert) -> None:
     """Persist session-level metadata captured before the first user prompt."""
 
     details = extract_session_details(context.prelude)
-    context.conn.execute(
+    session_cursor = context.conn.execute(
         """
         INSERT INTO sessions (
-            file_id, session_id, session_timestamp, cwd, approval_policy,
-            sandbox_mode, network_access, raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            file_id, session_id, session_timestamp, raw_json
+        ) VALUES (?, ?, ?, ?)
         """,
         (
             context.file_id,
             details["session_id"],
             details["session_timestamp"],
+            json_dumps({"events": context.prelude}),
+        ),
+    )
+    session_id = session_cursor.lastrowid
+    if session_id is None:
+        raise RuntimeError("Failed to insert session row")
+
+    # Insert context data into session_context table
+    context.conn.execute(
+        """
+        INSERT INTO session_context (
+            session_id, cwd, approval_policy, sandbox_mode, network_access
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            session_id,
             details["cwd"],
             details["approval_policy"],
             details["sandbox_mode"],
             details["network_access"],
-            json_dumps({"events": context.prelude}),
         ),
     )
 
@@ -422,17 +436,12 @@ def insert_turn_context(context: EventInsert) -> None:
     context.conn.execute(
         """
         INSERT INTO turn_context_messages (
-            prompt_id, timestamp, cwd, approval_policy, sandbox_mode,
-            network_access, writable_roots, raw_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            prompt_id, timestamp, writable_roots, raw_json
+        ) VALUES (?, ?, ?, ?)
         """,
         (
             context.prompt_id,
             context.timestamp,
-            ctx["cwd"],
-            ctx["approval_policy"],
-            ctx["sandbox_mode"],
-            ctx["network_access"],
             ctx["writable_roots"],
             json_dumps(context.raw),
         ),

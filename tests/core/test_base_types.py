@@ -27,6 +27,8 @@ def test_agent_config_requires_validate() -> None:
     """AgentConfig subclasses must implement abstract methods."""
 
     class DummyConfig(AgentConfig):
+        """Stub AgentConfig for abstract checks."""
+
         def __init__(self) -> None:
             super().__init__("dummy", Path.cwd(), features=None)
 
@@ -37,7 +39,10 @@ def test_agent_config_assigns_fields() -> None:
     """AgentConfig should persist constructor arguments."""
 
     class MinimalConfig(AgentConfig):
+        """Concrete AgentConfig for serialization tests."""
+
         def __init__(self) -> None:
+            """Initialize with default workspace and streaming enabled."""
             super().__init__(
                 agent_type="mini",
                 root_path=Path("/workspace"),
@@ -45,13 +50,18 @@ def test_agent_config_assigns_fields() -> None:
             )
 
         def validate(self) -> None:
+            """No-op validation."""
             return None
 
         def to_dict(self) -> dict[str, str]:
+            """Serialize to dictionary."""
             return {"type": self.agent_type, "root": str(self.root_path)}
 
         @classmethod
-        def from_dict(cls, data: dict[str, str]) -> "MinimalConfig":
+        def from_dict(
+            cls, data: dict[str, str]  # pylint: disable=unused-argument
+        ) -> "MinimalConfig":
+            """Deserialize from dictionary."""
             return cls()
 
     cfg = MinimalConfig()

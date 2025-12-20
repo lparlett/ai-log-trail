@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Any, Iterable, Iterator
 
 
 class SessionDiscoveryError(RuntimeError):
@@ -50,10 +50,10 @@ def iter_session_files(root: Path) -> Iterator[Path]:
                         yield file_path
 
 
-def load_session_events(file_path: Path) -> list[dict]:
+def load_session_events(file_path: Path) -> list[dict[str, Any]]:
     """Load JSONL session events from disk."""
 
-    events: list[dict] = []
+    events: list[dict[str, Any]] = []
     with file_path.open("r", encoding="utf-8") as handle:
         for line_number, raw_line in enumerate(handle, start=1):
             raw_line = raw_line.strip()
@@ -68,7 +68,9 @@ def load_session_events(file_path: Path) -> list[dict]:
     return events
 
 
-def group_by_user_messages(events: Iterable[dict]) -> tuple[list[dict], list[dict]]:
+def group_by_user_messages(
+    events: Iterable[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Group event stream so each user_message anchors the subsequent events.
 
     Returns:
@@ -79,9 +81,9 @@ def group_by_user_messages(events: Iterable[dict]) -> tuple[list[dict], list[dic
               until the next user_message).
     """
 
-    prelude: list[dict] = []
-    groups: list[dict] = []
-    current_group: dict | None = None
+    prelude: list[dict[str, Any]] = []
+    groups: list[dict[str, Any]] = []
+    current_group: dict[str, Any] | None = None
 
     for event in events:
         if (

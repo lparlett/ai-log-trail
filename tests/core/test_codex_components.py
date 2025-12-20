@@ -116,16 +116,20 @@ def test_agent_registry_register_and_get(tmp_path: Path) -> None:
         agent_type = "dummy"
 
         def __init__(self, root_path: Path) -> None:
+            """Initialize with root path."""
             super().__init__("dummy", root_path, AgentFeatures())
 
         def validate(self) -> None:
+            """No-op validation."""
             return None
 
         def to_dict(self) -> dict[str, str]:
+            """Serialize to dictionary."""
             return {"root": str(self.root_path)}
 
         @classmethod
         def from_dict(cls, data: dict[str, str]) -> "DummyConfig":
+            """Deserialize from dictionary."""
             return cls(Path(data["root"]))
 
     AgentRegistry.register(DummyConfig)

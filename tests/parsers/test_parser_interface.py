@@ -1,4 +1,4 @@
-﻿"""Tests for parser interface definitions (AI-assisted by Codex GPT-5)."""
+"""Tests for parser interface definitions (AI-assisted by Codex GPT-5)."""
 
 # pylint: disable=import-error,too-few-public-methods
 
@@ -21,6 +21,7 @@ class DummyEvent(BaseEvent):
     """Minimal concrete event for testing."""
 
     def to_dict(self) -> dict[str, Any]:
+        """Convert event to dictionary representation."""
         raw = getattr(self._data, "raw_data", None)
         if isinstance(raw, dict):
             return raw
@@ -28,6 +29,7 @@ class DummyEvent(BaseEvent):
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> BaseEvent:
+        """Construct event from dictionary representation."""
         event_data = BaseEventData(
             agent_type=data.get("agent_type", "dummy"),
             timestamp=datetime.fromisoformat(data["timestamp"]),
@@ -45,9 +47,11 @@ class DummyParser(ILogParser):
 
     @property
     def agent_type(self) -> str:
+        """Return the agent type identifier."""
         return "dummy"
 
     def get_metadata(self, file_path: Path) -> AgentLogMetadata:
+        """Extract metadata from file path."""
         return AgentLogMetadata(
             agent_type=self.agent_type,
             session_id=file_path.stem,
@@ -56,6 +60,7 @@ class DummyParser(ILogParser):
         )
 
     def parse_file(self, file_path: Path) -> Iterator[BaseEvent]:
+        """Parse file and yield BaseEvent instances."""
         data = BaseEventData(
             agent_type=self.agent_type,
             timestamp=datetime(2025, 11, 23, tzinfo=timezone.utc),
@@ -68,12 +73,15 @@ class DummyParser(ILogParser):
         yield DummyEvent(data)
 
     def find_log_files(self, root_path: Path) -> Generator[Path, None, None]:
+        """Find and yield JSONL files in root path, sorted."""
         yield from sorted(root_path.glob("*.jsonl"))
 
     def validate_event(self, event_data: dict[str, Any]) -> bool:
+        """Check if event data is valid based on 'valid' key."""
         return bool(event_data.get("valid"))
 
     def get_agent_type(self) -> str:
+        """Return the agent type identifier."""
         return self.agent_type
 
 
@@ -95,8 +103,11 @@ def test_ilogparser_requires_abstracts() -> None:
     """Instantiating ILogParser without implementations should fail."""
 
     class PartialParser(ILogParser):  # pylint: disable=abstract-method
+        """Partial parser stub lacking full implementation."""
+
         @property
         def agent_type(self) -> str:  # pragma: no cover - abstract enforcement
+            """Return agent type (stub)."""
             return "partial"
 
     with pytest.raises(TypeError):

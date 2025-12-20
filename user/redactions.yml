@@ -12,10 +12,10 @@
   reason: "default token redaction"
 - id: file_paths
   type: regex
-  pattern: "(?:[A-Za-z]:\\\\[^\\s]+|/[^\\s]+)"
+  pattern: "(?:[A-Za-z]:\\\\[^\\s<>]*|\\\\\\\\[A-Za-z0-9._\\-]+\\\\[^\\s<>]*|(?<=[=\\s])/[^\\s<>]*)"
   scope: global
   enabled: true
-  reason: "default path redaction"
+  reason: "default path redaction (Windows drive, UNC, and Unix paths preceded by = or space)"
 - id: bracketed_troubleshooting
   type: regex
   pattern: "\\[[^\\]]{8,}\\]"

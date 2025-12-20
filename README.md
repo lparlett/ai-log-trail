@@ -11,16 +11,58 @@
 
 ---
 
+## Table of Contents
+
+- [Why this exists](#why-this-exists)
+- [Architecture Overview](#architecture-overview)
+- [Current capabilities](#current-capabilities)
+- [Getting started](#getting-started)
+- [CLI Commands](#cli-commands)
+- [Documentation](#documentation)
+- [Troubleshooting](#troubleshooting)
+- [Roadmap snapshot](#roadmap-snapshot-2025-10-30)
+- [Contributing](#contributing--ethos)
+
+---
+
 ## Why this exists
 
-Codex (and other AI coding tools) produce rich session logs, but they’re hard to read and even harder to share responsibly. The AI Log Trail tool ingests `*.json` or `*.jsonl` session data, normalizes it into SQLite, and generates human-friendly reports that highlight:
+Codex (and other AI coding tools) produce rich session logs, but they're hard to read and even harder to share responsibly. The AI Log Trail tool ingests `*.json` or `*.jsonl` session data, normalizes it into SQLite, and generates human-friendly reports that highlight:
 
 - User prompts and the agent responses/actions.
 - Token usage and cost indicators.
 - Function calls, reasoning trails, and decision history.
-- Redactions applied to sensitive content so transparency doesn’t compromise privacy.
+- Redactions applied to sensitive content so transparency doesn't compromise privacy.
 
 The goal is a workflow where AI-assisted coding can be audited, explained, and optionally published in repositories or release notes.
+
+---
+
+## Architecture Overview
+
+The AI Log Trail follows a simple 5-stage pipeline:
+
+```text
+Session Files (JSONL)
+        ↓
+   [Parser] ← discover, load, validate, group by user message
+        ↓
+   [Ingest] ← normalize, sanitize, persist to SQLite
+        ↓
+   [Redaction] ← apply rules & manual redactions
+        ↓
+   [Export] ← generate reports, output redacted data
+```
+
+**Key components:**
+
+- **Parser** (`src/parsers/`) — Discovers nested session directories, loads JSONL events, groups by user prompt
+- **Ingest** (`src/services/ingest.py`) — Validates, sanitizes, applies rule-based redactions, persists to SQLite in a transaction
+- **Database** (`src/services/database.py`) — 12 normalized tables with cascading FK, audit trail via `raw_json` columns
+- **Redactions** (`src/services/redactions.py`, `src/services/redaction_rules.py`) — Rule library, application tracking, deduplication via fingerprints
+- **CLI** (`cli/`) — Entry points: ingest, group (display), export, rules management, migration
+
+**Learn more:** [`docs/architecture.md`](docs/architecture.md) — Full system design, data flows, error handling.
 
 ---
 
@@ -62,8 +104,7 @@ The goal is a workflow where AI-assisted coding can be audited, explained, and o
    #   [outputs].reports_dir -> where grouped reports should be written
    ```
 
-   Optional tuning: set `[ingest].batch_size` in `user/config.toml` if you want a
-   larger or smaller event batch during ingest (default is 1000).
+   Optional tuning: set `[ingest].batch_size` in `user/config.toml` if you want a larger or smaller event batch during ingest (default is 1000).
 
 2. **Ingest a sample**
 
@@ -72,6 +113,7 @@ The goal is a workflow where AI-assisted coding can be audited, explained, and o
    ```
 
    This ingests the first two sessions, logs verbose output, and writes to `[ingest].db_path`.
+
 3. **Explore prompts**
 
    ```bash
@@ -79,6 +121,63 @@ The goal is a workflow where AI-assisted coding can be audited, explained, and o
    ```
 
    Generates a grouped text report for the earliest session, stored under `[outputs].reports_dir` (override with `-o`).
+
+---
+
+## CLI Commands
+
+The tool provides 5 main CLI commands. See [`docs/cli.md`](docs/cli.md) for full reference and examples.
+
+| Command | Purpose | Example |
+|---------|---------|---------|
+| `ingest_session` | Load session logs into SQLite | `python -m cli.ingest_session --debug` |
+| `group_session` | Display prompts & events | `python -m cli.group_session --list` |
+| `export_session` | Export redacted session data | `python -m cli.export_session --format csv` |
+| `redaction_rules` | Manage redaction library | `python -m cli.redaction_rules list --source yaml` |
+| `migrate_sqlite_to_postgres` | Scale to PostgreSQL | `python -m cli.migrate_sqlite_to_postgres --dry-run` |
+
+---
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [`docs/architecture.md`](docs/architecture.md) | System design: components, data flow, pipelines, algorithms |
+| [`docs/schema.md`](docs/schema.md) | Database schema: table definitions, relationships, indexes |
+| [`docs/cli.md`](docs/cli.md) | CLI reference: all commands, options, examples, workflows |
+| [`docs/schema_changes.md`](docs/schema_changes.md) | Migration history: schema evolution, backward compatibility |
+| [`docs/redaction_rules.md`](docs/redaction_rules.md) | Redaction authoring: rule syntax, ordering, examples |
+| [`docs/migration.md`](docs/migration.md) | SQLite → Postgres migration: steps, dry-run, rollback |
+| [`AGENTS.md`](AGENTS.md) | Development: coding standards, testing, security, versioning |
+| [`ROADMAP.md`](ROADMAP.md) | Feature roadmap: phases, milestones, priorities |
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### ConfigError: sessions.root not found
+
+- Ensure `[sessions].root` in `user/config.toml` points to an existing directory
+- See [`docs/cli.md#troubleshooting`](docs/cli.md#troubleshooting) for detailed steps
+
+#### SessionDiscoveryError: no sessions found
+
+- Verify Codex logs are in the configured directory under `YYYY/MM/DD/` structure
+- Run `ls -la /path/to/sessions/2025/` to check
+
+#### EventValidationError: Missing required field 'type'
+
+- Session JSONL file is malformed; inspect with `python -m json.tool`
+- Try a different session file or repair JSONL before ingesting
+
+#### Slow ingest
+
+- Increase `[ingest].batch_size` in `user/config.toml` (default 1000)
+- Run with `--limit 1` to process fewer files at once
+
+For more details, see [`docs/cli.md#troubleshooting`](docs/cli.md#troubleshooting).
 
 ---
 

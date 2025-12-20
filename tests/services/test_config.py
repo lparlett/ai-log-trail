@@ -1,12 +1,14 @@
-﻿# pylint: disable=import-error
+# pylint: disable=import-error
+"""Tests for configuration loading and validation."""
+
+import importlib
+import importlib.util
 import os
+import sys
 import textwrap
 import unittest
 from pathlib import Path
 from typing import Any
-import importlib
-import importlib.util
-import sys
 
 import pytest
 
@@ -270,7 +272,7 @@ def test_load_config_invalid_db_parent(tmp_path: Path) -> None:
 
 
 def test_load_config_reports_dir_missing(tmp_path: Path) -> None:
-    """Test that missing reports directory triggers validation error."""
+    """Test that missing reports directory is created automatically."""
 
     sessions_root = tmp_path / "sessions"
     sessions_root.mkdir()
@@ -287,8 +289,56 @@ def test_load_config_reports_dir_missing(tmp_path: Path) -> None:
         """,
     )
 
-    with pytest.raises(ConfigError, match="does not exist"):
-        load_config(config_path)
+    config = load_config(config_path)
+    TC.assertEqual(config.outputs.reports_dir, missing_reports)
+    TC.assertTrue(missing_reports.exists())
+
+
+def test_load_config_reports_dir_nested_missing(tmp_path: Path) -> None:
+    """Test that missing nested reports directory is created automatically."""
+
+    sessions_root = tmp_path / "sessions"
+    sessions_root.mkdir()
+
+    nested_reports = tmp_path / "a" / "b" / "c" / "reports"
+    config_path = _write_config(
+        tmp_path,
+        f"""
+        [sessions]
+        root = "{_path_for_toml(sessions_root)}"
+
+        [outputs]
+        reports_dir = "{_path_for_toml(nested_reports)}"
+        """,
+    )
+
+    config = load_config(config_path)
+    TC.assertEqual(config.outputs.reports_dir, nested_reports)
+    TC.assertTrue(nested_reports.exists())
+    TC.assertTrue(nested_reports.is_dir())
+
+
+def test_load_outputs_config_default_with_empty_dict(tmp_path: Path) -> None:
+    """_load_outputs_config should use default when passed empty outputs dict."""
+
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        outputs = _load_outputs_config({})
+        reports_path = tmp_path / "reports"
+        TC.assertTrue(reports_path.exists())
+        TC.assertEqual(outputs.reports_dir, reports_path.resolve())
+    finally:
+        os.chdir(cwd)
+
+
+def test_load_outputs_config_custom_path_created(tmp_path: Path) -> None:
+    """_load_outputs_config should create custom path if it doesn't exist."""
+
+    custom_reports = tmp_path / "custom_output_dir"
+    outputs = _load_outputs_config({"reports_dir": _path_for_toml(custom_reports)})
+    TC.assertTrue(custom_reports.exists())
+    TC.assertEqual(outputs.reports_dir, custom_reports.resolve())
 
 
 def test_load_config_invalid_backend(tmp_path: Path) -> None:
@@ -537,10 +587,14 @@ def test_toml_fallback_to_tomli(monkeypatch: Any) -> None:
         TC.fail("Failed to load config module spec for fallback test.")
 
     class _TomliStub:  # pylint: disable=too-few-public-methods
-        class TOMLDecodeError(Exception): ...
+        """Minimal tomli stub for import fallback."""
+
+        class TOMLDecodeError(Exception):
+            """Placeholder TOML decode error."""
 
         @staticmethod
         def loads(_text: str) -> dict[str, Any]:
+            """Return empty dict for stubbed toml loads."""
             return {}
 
     def _fake_import(name: str) -> Any:

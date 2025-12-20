@@ -53,8 +53,8 @@ class EventContext:
     file_id: int
     prompt_id: int
     timestamp: str | None
-    payload: dict
-    raw_event: dict
+    payload: dict[str, Any]
+    raw_event: dict[str, Any]
     counts: dict[str, int]
 
 

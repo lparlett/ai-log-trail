@@ -22,29 +22,50 @@ def validate_event(event: Any) -> dict[str, Any]:
     objects with a string ``type`` and (optional) dict ``payload`` are allowed.
     """
 
+    normalized = _ensure_event_dict(event)
+    normalized["payload"] = _normalize_payload(normalized.get("payload"))
+    _validate_required_fields(normalized)
+    _validate_timestamp(normalized.get("timestamp"))
+    _normalize_metadata(normalized)
+    return normalized
+
+
+def _ensure_event_dict(event: Any) -> dict[str, Any]:
+    """Validate top-level type and return a shallow copy."""
+
     if not isinstance(event, dict):
         raise EventValidationError("Event must be a JSON object.")
+    return dict(event)
 
-    normalized: dict[str, Any] = dict(event)
 
-    event_type = normalized.get("type")
+def _normalize_payload(payload: Any) -> dict[str, Any]:
+    """Normalize payload field to a dict."""
+
+    if payload is None:
+        return {}
+    if isinstance(payload, dict):
+        return dict(payload)
+    raise EventValidationError("Event 'payload' must be a JSON object.")
+
+
+def _validate_required_fields(event: dict[str, Any]) -> None:
+    """Ensure required 'type' field is present and valid."""
+
+    event_type = event.get("type")
     if not isinstance(event_type, str) or not event_type.strip():
         raise EventValidationError("Event 'type' must be a non-empty string.")
 
-    timestamp = normalized.get("timestamp")
+
+def _validate_timestamp(timestamp: Any) -> None:
+    """Ensure timestamp is string or None."""
+
     if timestamp is not None and not isinstance(timestamp, str):
         raise EventValidationError("Event 'timestamp' must be a string or null.")
 
-    payload = normalized.get("payload")
-    if payload is None:
-        normalized["payload"] = {}
-    elif isinstance(payload, dict):
-        normalized["payload"] = dict(payload)
-    else:
-        raise EventValidationError("Event 'payload' must be a JSON object.")
 
-    metadata = normalized.get("metadata")
+def _normalize_metadata(event: dict[str, Any]) -> None:
+    """Normalize metadata to a dict when present."""
+
+    metadata = event.get("metadata")
     if metadata is not None and not isinstance(metadata, dict):
-        normalized["metadata"] = {}
-
-    return normalized
+        event["metadata"] = {}

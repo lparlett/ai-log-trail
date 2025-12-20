@@ -91,3 +91,162 @@ def sample_raw_event() -> dict[str, Any]:
         "timestamp": "2025-10-31T10:00:00Z",
         "payload": {"type": "user_message", "message": "Test message"},
     }
+
+
+# === Database migration test fixtures ===
+
+
+# Old schema definition for testing migration scenarios
+# This schema is missing the session_context table to test the migration
+# that creates it from sessions data. This represents pre-migration databases.
+OLD_SCHEMA = """
+CREATE TABLE files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE prompts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id INTEGER NOT NULL,
+    user_input TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+);
+
+CREATE TABLE messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    prompt_id INTEGER NOT NULL,
+    message_type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    is_user_message INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (prompt_id) REFERENCES prompts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE sessions (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT UNIQUE,
+    session_start_time TEXT NOT NULL,
+    session_end_time TEXT,
+    files_count INTEGER DEFAULT 0,
+    prompts_count INTEGER DEFAULT 0,
+    messages_count INTEGER DEFAULT 0,
+    cwd TEXT,
+    approval_policy TEXT,
+    sandbox_mode INTEGER DEFAULT 0,
+    network_access INTEGER DEFAULT 0,
+    metadata_json TEXT
+);
+
+CREATE TABLE turn_context_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    prompt_id INTEGER NOT NULL,
+    agent_type TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    cwd TEXT,
+    FOREIGN KEY (prompt_id) REFERENCES prompts(id) ON DELETE CASCADE
+);
+
+CREATE TABLE redactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL,
+    field_name TEXT NOT NULL,
+    scope TEXT,
+    replacement_text TEXT,
+    rule_name TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+);
+
+CREATE TABLE redaction_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_name TEXT UNIQUE NOT NULL,
+    pattern TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL
+);
+"""
+
+
+@pytest.fixture
+def fresh_sqlite_db(tmp_path: Path) -> Generator[sqlite3.Connection, None, None]:
+    """Create a fresh SQLite database with current schema."""
+    db_path = tmp_path / "fresh.sqlite"
+    conn = sqlite3.connect(db_path)
+    ensure_schema(conn)
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def old_schema_sqlite_db(tmp_path: Path) -> Generator[sqlite3.Connection, None, None]:
+    """Create an SQLite database with old schema (before migrations)."""
+    db_path = tmp_path / "old_schema.sqlite"
+    conn = sqlite3.connect(db_path)
+
+    # Execute old schema
+    for statement in OLD_SCHEMA.split("CREATE TABLE"):
+        if statement.strip():
+            conn.execute(f"CREATE TABLE {statement.strip()}")
+
+    conn.commit()
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def migrated_sqlite_db(
+    old_schema_sqlite_db: sqlite3.Connection,
+) -> Generator[sqlite3.Connection, None, None]:
+    """Create an SQLite database with old schema, then apply migrations."""
+    # Import here to avoid circular imports and to ensure old_schema_sqlite_db fixture runs first
+    from src.services.database import (  # pylint: disable=import-outside-toplevel,reimported
+        ensure_schema,
+    )
+
+    # Apply migrations to the old schema
+    ensure_schema(old_schema_sqlite_db)
+    old_schema_sqlite_db.commit()
+
+    yield old_schema_sqlite_db
+
+
+@pytest.fixture
+def ingest_event_factory() -> dict[str, Any]:
+    """Factory for creating synthetic ingest events with various payload types."""
+
+    def make_event(
+        event_type: str = "event_msg",
+        payload_type: str = "user_message",
+        timestamp: str | None = None,
+        **payload_kwargs: Any,
+    ) -> dict[str, Any]:
+        """Create a synthetic event for testing.
+
+        Args:
+            event_type: The event type (e.g., 'event_msg')
+            payload_type: The payload type (e.g., 'user_message', 'code_action')
+            timestamp: ISO 8601 timestamp (defaults to fixed test timestamp)
+            **payload_kwargs: Additional fields to include in the payload
+
+        Returns:
+            A dictionary representing a complete event
+        """
+        if timestamp is None:
+            timestamp = "2025-10-31T10:00:00Z"
+
+        payload = {"type": payload_type, **payload_kwargs}
+
+        return {
+            "type": event_type,
+            "timestamp": timestamp,
+            "payload": payload,
+        }
+
+    return {"make_event": make_event}

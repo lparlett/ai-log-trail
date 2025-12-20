@@ -1,6 +1,6 @@
-"""Tests for session ingestion functionality."""
+﻿"""Tests for session ingestion functionality."""
 
-# pylint: disable=import-error,protected-access
+# pylint: disable=import-error,protected-access,import-outside-toplevel
 
 from __future__ import annotations
 
@@ -265,7 +265,7 @@ def test_ingest_single_session_rolls_back_on_failure(
     session_file = tmp_path / "bad.jsonl"
     session_file.write_text('{"type": "event_msg", "payload": {}}', encoding="utf-8")
 
-    def _raise(*_args: Any, **_kwargs: Any) -> None:
+    def _raise(*_args: Any, **_kwargs: Any) -> None:  # pylint: disable=unused-argument
         raise RuntimeError("boom")
 
     monkeypatch.setattr(ingest.SessionIngester, "process_session", _raise)
@@ -292,9 +292,10 @@ def test_ingest_session_file_rollback_on_db_error(
             super().__init__(*args, **kwargs)
             self.executed = False
 
-        def execute(
-            self, *args: Any, **kwargs: Any
-        ) -> Any:  # pylint: disable=unused-argument
+        def execute(self, *args: Any, **kwargs: Any) -> Any:
+            """Simulate a failing execute call for rollback testing."""
+            _ = args
+            _ = kwargs
             self.executed = True
             raise sqlite3.DatabaseError("boom")
 
@@ -357,7 +358,7 @@ def test_ingest_sessions_in_directory_propagates_non_discovery_error(
 ) -> None:
     """Unexpected errors inside ingest_sessions_in_directory should propagate."""
 
-    def _boom(_root: Path) -> list[Path]:
+    def _boom(_root: Path) -> list[Path]:  # pylint: disable=unused-argument
         raise RuntimeError("explode")
 
     monkeypatch.setattr(ingest, "iter_session_files", _boom)
@@ -380,7 +381,7 @@ def test_ingest_single_session_propagates_unexpected_errors(
     session_file = tmp_path / "session.jsonl"
     session_file.write_text("{}", encoding="utf-8")
 
-    def _boom(*_args: Any, **_kwargs: Any) -> None:
+    def _boom(*_args: Any, **_kwargs: Any) -> None:  # pylint: disable=unused-argument
         raise RuntimeError("explode")
 
     monkeypatch.setattr(ingest, "load_session_events", _boom)
@@ -477,3 +478,160 @@ def test_ingest_session_file_success(sample_session_file: Path, tmp_path: Path) 
     db_path = tmp_path / "ok.sqlite"
     summary = ingest_session_file(sample_session_file, db_path, batch_size=2)
     TC.assertGreaterEqual(summary["prompts"], 0)
+
+
+def test_log_processing_error_critical_severity() -> None:
+    """Test that CRITICAL severity errors are logged at critical level."""
+    from unittest.mock import patch
+
+    critical_error = ProcessingError(
+        severity=ErrorSeverity.CRITICAL,
+        code="test_critical",
+        message="This is a critical error",
+        recommended_action=ProcessingErrorAction.ABORT,
+    )
+
+    with patch("src.services.ingest.logger") as mock_logger:
+        ingest._log_processing_error(critical_error)
+        mock_logger.critical.assert_called_once()
+
+
+def test_serialize_processing_error_with_context() -> None:
+    """Test that ProcessingError with context is properly serialized."""
+    error = ProcessingError(
+        severity=ErrorSeverity.ERROR,
+        code="test_error",
+        message="Test error message",
+        recommended_action=ProcessingErrorAction.CONTINUE,
+        file_path=Path("test.jsonl"),
+        line_number=42,
+        context={"key": "value"},
+    )
+
+    serialized = ingest.serialize_processing_error(error)
+    TC.assertEqual(serialized["severity"], "ERROR")
+    TC.assertEqual(serialized["code"], "test_error")
+    TC.assertEqual(serialized["message"], "Test error message")
+    TC.assertIn("context", serialized)
+
+
+def test_serialize_processing_error_without_context() -> None:
+    """Test that ProcessingError without context serializes correctly."""
+    error = ProcessingError(
+        severity=ErrorSeverity.WARNING,
+        code="test_warning",
+        message="Test warning",
+        recommended_action=ProcessingErrorAction.CONTINUE,
+    )
+
+    serialized = ingest.serialize_processing_error(error)
+    TC.assertEqual(serialized["severity"], "WARNING")
+    TC.assertEqual(serialized["code"], "test_warning")
+    TC.assertIsNone(serialized.get("context"))
+
+
+def test_ensure_file_row_reuses_existing(
+    db_connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Test that _ensure_file_row reuses existing file entries."""
+    session_file = tmp_path / "existing.jsonl"
+    session_file.write_text("{}", encoding="utf-8")
+
+    # Insert first time
+    file_id_1 = ingest._ensure_file_row(db_connection, session_file)
+    TC.assertGreater(file_id_1, 0)
+
+    # Insert again - should return same ID
+    file_id_2 = ingest._ensure_file_row(db_connection, session_file)
+    TC.assertEqual(file_id_1, file_id_2)
+
+    # Verify only one file record exists
+    cursor = db_connection.cursor()
+    cursor.execute("SELECT COUNT(*) FROM files WHERE path = ?", (str(session_file),))
+    TC.assertEqual(cursor.fetchone()[0], 1)
+
+
+def test_ensure_file_row_clears_previous_data(
+    db_connection: sqlite3.Connection, tmp_path: Path
+) -> None:
+    """Test that reinserting a file clears previous prompts and sessions."""
+    session_file = tmp_path / "reused.jsonl"
+    session_file.write_text("{}", encoding="utf-8")
+
+    file_id_1 = ingest._ensure_file_row(db_connection, session_file)
+
+    # Insert some dummy data
+    cursor = db_connection.cursor()
+    cursor.execute(
+        "INSERT INTO sessions (file_id) VALUES (?)",
+        (file_id_1,),
+    )
+    cursor.execute(
+        "INSERT INTO prompts (file_id, prompt_index) VALUES (?, ?)",
+        (file_id_1, 0),
+    )
+    db_connection.commit()
+
+    # Verify data was inserted
+    cursor.execute("SELECT COUNT(*) FROM sessions WHERE file_id = ?", (file_id_1,))
+    initial_count = cursor.fetchone()[0]
+    TC.assertEqual(initial_count, 1)
+
+    # Ensure file row again
+    file_id_2 = ingest._ensure_file_row(db_connection, session_file)
+    TC.assertEqual(file_id_1, file_id_2)
+
+    # Verify previous data was cleared
+    cursor.execute("SELECT COUNT(*) FROM sessions WHERE file_id = ?", (file_id_1,))
+    final_count = cursor.fetchone()[0]
+    TC.assertEqual(final_count, 0, "Previous sessions should be cleared")
+
+    cursor.execute("SELECT COUNT(*) FROM prompts WHERE file_id = ?", (file_id_1,))
+    prompt_count = cursor.fetchone()[0]
+    TC.assertEqual(prompt_count, 0, "Previous prompts should be cleared")
+
+
+def test_build_prompt_insert_with_full_payload(
+    db_connection: sqlite3.Connection,
+) -> None:
+    """Test _build_prompt_insert with complete payload data."""
+    file_id = 1
+    # Insert dummy file for FK constraint
+    db_connection.execute("INSERT INTO files (path) VALUES (?)", ("test.jsonl",))
+
+    prompt_event = {
+        "type": "event_msg",
+        "timestamp": "2025-01-01T00:00:00Z",
+        "payload": {
+            "type": "user_message",
+            "message": "Hello, world!",
+            "activeFile": "main.py",
+            "openTabs": ["main.py", "test.py"],
+            "myRequest": "Help me refactor",
+        },
+    }
+
+    result = ingest._build_prompt_insert(db_connection, file_id, 0, prompt_event)
+    TC.assertIsInstance(result, ingest.PromptInsert)
+    TC.assertEqual(result.message, "Hello, world!")
+    TC.assertEqual(result.file_id, file_id)
+    TC.assertEqual(result.prompt_index, 0)
+
+
+def test_sanitize_json_for_storage_with_complex_data() -> None:
+    """Test sanitize_json_for_storage handles nested structures."""
+    complex_data = {
+        "level1": {
+            "level2": {
+                "list": [1, 2, 3],
+                "string": "value",
+                "null": None,
+            },
+        },
+        "array": ["a", "b", "c"],
+    }
+
+    result = ingest.sanitize_json_for_storage(complex_data)
+    TC.assertIsInstance(result, dict)
+    TC.assertIn("level1", result)
+    TC.assertIsInstance(result["level1"], dict)

@@ -1,38 +1,5 @@
-[MAIN]
-persistent=yes
-load-plugins=
+[MASTER]
+init-hook='import sys; sys.path.append(".")'
 
 [MESSAGES CONTROL]
-disable=
-    C0111,  # missing-docstring
-    C0103,  # invalid-name
-    C0303,  # trailing-whitespace
-    W0511,  # fixme
-    C0301   # line-too-long (handled by black)
-
-[REPORTS]
-output-format=text
-score=no
-
-[BASIC]
-good-names=i,j,k,ex,Run,_,fp
-bad-names=foo,bar,baz
-
-[FORMAT]
-max-line-length=88
-ignore-long-lines=^\s*(# )?<?https?://\S+>?$
-single-line-if-stmt=no
-max-module-lines=2000
-indent-after-paren=4
-
-[STRING]
-check-quote-consistency=yes
-
-[MISCELLANEOUS]
-notes=FIXME,XXX,TODO
-
-[SIMILARITIES]
-min-similarity-lines=4
-ignore-comments=yes
-ignore-docstrings=yes
-ignore-imports=yes
+disable=duplicate-code,R0801

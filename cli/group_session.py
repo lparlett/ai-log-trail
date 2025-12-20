@@ -11,6 +11,7 @@ import argparse
 import sys
 from pathlib import Path
 from textwrap import indent
+from typing import Any
 
 from src.parsers.session_parser import (
     SessionDiscoveryError,
@@ -19,6 +20,8 @@ from src.parsers.session_parser import (
     load_session_events,
 )
 from src.services.config import ConfigError, SessionsConfig, load_config
+
+__all__: list[str] = ["SessionDiscoveryError", "main"]
 
 
 def shorten(text: str, limit: int = 120) -> str:
@@ -30,7 +33,7 @@ def shorten(text: str, limit: int = 120) -> str:
     return text[: limit - 3].rstrip() + "..."
 
 
-def describe_event(event: dict) -> str:
+def describe_event(event: dict[str, Any]) -> str:
     """Build a concise description for an event."""
 
     event_type = event.get("type", "<unknown>")
@@ -52,7 +55,7 @@ def describe_event(event: dict) -> str:
 
 
 def _describe_payload(
-    event_type: str, payload_type: str | None, payload: dict
+    event_type: str, payload_type: str | None, payload: dict[str, Any]
 ) -> list[str]:
     """Route payload description to the appropriate helper."""
 
@@ -67,7 +70,7 @@ def _describe_payload(
     return []
 
 
-def _describe_event_msg(payload_type: str | None, payload: dict) -> list[str]:
+def _describe_event_msg(payload_type: str | None, payload: dict[str, Any]) -> list[str]:
     """Describe payloads attached to event_msg entries, such as reasoning or messages."""
 
     result = []
@@ -93,7 +96,7 @@ def _describe_event_msg(payload_type: str | None, payload: dict) -> list[str]:
     return result
 
 
-def _describe_token_count(payload: dict) -> list[str]:
+def _describe_token_count(payload: dict[str, Any]) -> list[str]:
     """Render token utilization information for token_count payloads."""
 
     lines: list[str] = []
@@ -114,7 +117,9 @@ def _describe_token_count(payload: dict) -> list[str]:
     return lines
 
 
-def _describe_response_item(payload_type: str | None, payload: dict) -> list[str]:
+def _describe_response_item(
+    payload_type: str | None, payload: dict[str, Any]
+) -> list[str]:
     """Describe response_item payload contents (messages, function calls, outputs)."""
 
     lines: list[str] = []
@@ -154,7 +159,7 @@ def _describe_response_item(payload_type: str | None, payload: dict) -> list[str
     return lines
 
 
-def _describe_turn_context(payload: dict) -> list[str]:
+def _describe_turn_context(payload: dict[str, Any]) -> list[str]:
     """Render turn context metadata for display."""
 
     cwd = payload.get("cwd")
@@ -250,7 +255,7 @@ def _render_session(session_file: Path) -> list[str]:
     return captured
 
 
-def _render_prelude(prelude: list[dict], captured: list[str]) -> None:
+def _render_prelude(prelude: list[dict[str, Any]], captured: list[str]) -> None:
     """Render prelude events that occur before the first user prompt."""
 
     if not prelude:
@@ -262,7 +267,7 @@ def _render_prelude(prelude: list[dict], captured: list[str]) -> None:
         _emit(indent(describe_event(event), "  "), captured)
 
 
-def _render_groups(groups: list[dict], captured: list[str]) -> None:
+def _render_groups(groups: list[dict[str, Any]], captured: list[str]) -> None:
     """Render all prompt groups or emit a notice when none are present."""
 
     if not groups:
@@ -273,7 +278,9 @@ def _render_groups(groups: list[dict], captured: list[str]) -> None:
         _render_prompt_group(index, group, captured)
 
 
-def _render_prompt_group(index: int, group: dict, captured: list[str]) -> None:
+def _render_prompt_group(
+    index: int, group: dict[str, Any], captured: list[str]
+) -> None:
     """Render a single prompt group and its subsequent events."""
 
     user_event = group.get("user", {})

@@ -24,6 +24,7 @@ class _DummyConn:
         self.closed = False
 
     def close(self) -> None:
+        """Mark connection as closed."""
         self.closed = True
 
 
@@ -46,20 +47,25 @@ class _DummyPgConn:
         return None
 
     def cursor(self) -> "_DummyPgConn":
+        """Return self as cursor stub."""
         return self
 
     def execute(
         self, statement: Any, _params: Any | None = None
     ) -> None:  # pylint: disable=unused-argument
+        """Record executed statement."""
         self.executed.append(statement)
 
     def fetchone(self) -> tuple[int]:
+        """Return one-row result tuple."""
         return (1,)
 
     def commit(self) -> None:
+        """Commit stub (no-op)."""
         return None
 
     def close(self) -> None:
+        """Mark connection as closed."""
         self.closed = True
 
 
@@ -215,19 +221,28 @@ def test_copy_table_fk_violation_rolls_back() -> None:
     """_copy_table should propagate FK failures for visibility."""
 
     class _SqliteCur:
+        """SQLite cursor stub returning invalid FK rows."""
+
         description = [("id",), ("file_id",)]
 
         def execute(self, _stmt: str) -> None:
+            """No-op execute for stub."""
             return None
 
         def fetchall(self) -> list[tuple[int, int]]:
+            """Return rows that violate FK constraints."""
             return [(1, 999)]  # invalid FK
 
     class _SqliteConn:
+        """SQLite connection stub yielding _SqliteCur."""
+
         def cursor(self) -> _SqliteCur:
+            """Return a new _SqliteCur stub."""
             return _SqliteCur()
 
     class _PgCur:
+        """Postgres cursor stub that raises on commit."""
+
         def __enter__(self) -> "_PgCur":
             return self
 
@@ -235,14 +250,19 @@ def test_copy_table_fk_violation_rolls_back() -> None:
             return None
 
         def execute(self, stmt: Any, params: Any | None = None) -> None:  # noqa: ARG002
+            """Record execute parameters for coverage."""
             _ = stmt
             _ = params
 
     class _PgConn:
+        """Postgres connection stub that fails on commit."""
+
         def cursor(self) -> _PgCur:
+            """Return a new _PgCur stub."""
             return _PgCur()
 
         def commit(self) -> None:
+            """Raise to simulate FK violation on commit."""
             raise RuntimeError("fk violation")
 
     sqlite_conn = sqlite3.connect(":memory:")
@@ -251,17 +271,24 @@ def test_copy_table_fk_violation_rolls_back() -> None:
     pg_conn = _PgConn()
 
     class _DummySqlModule:
+        """psycopg2.sql stub module."""
+
         class SQL:
+            """SQL stub preserving template text."""
+
             def __init__(self, _text: str = "") -> None:
                 self.text = _text
 
             def join(self, _iterable: Any) -> "_DummySqlModule.SQL":
+                """Return self; join is not simulated."""
                 return self
 
             def format(self, *_args: Any, **_kwargs: Any) -> "_DummySqlModule.SQL":
+                """Return self; format is not simulated."""
                 return self
 
-        class Identifier(SQL): ...
+        class Identifier(SQL):
+            """SQL identifier stub inheriting SQL."""
 
     dummy_sql = _DummySqlModule()
     dummy_extras = type("Extras", (), {"execute_values": lambda *args, **kwargs: None})
@@ -298,11 +325,14 @@ def test_run_dry_run_row_counts_match(tmp_path: Path) -> None:
     src.commit()
 
     class _PgConn(_DummyPgConn):
+        """Postgres connection stub returning matching counts."""
+
         def __init__(self) -> None:
             super().__init__()
             self.row_count = 1
 
         def fetchone(self) -> tuple[int]:
+            """Return a single-row count matching source."""
             return (1,)
 
     pg_conn = _PgConn()

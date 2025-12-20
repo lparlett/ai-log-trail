@@ -1,4 +1,4 @@
-﻿"""Tests for db_utils and event_handlers helpers (AI-assisted by Codex GPT-5)."""
+"""Tests for db_utils and event_handlers helpers (AI-assisted by Codex GPT-5)."""
 
 # pylint: disable=import-error
 
@@ -236,7 +236,11 @@ def test_parse_and_extract_helpers() -> None:
 
 def test_parse_prompt_message_handles_state_resets() -> None:
     """Ensure open tabs parsing stops on blanks or new headers."""
-    message = "## Open tabs:\n- tab1\n\n## My request for Codex:\nLine1\n## Other header:\nIgnored\n"
+    message = (
+        "## Open tabs:\n- tab1\n\n"
+        "## My request for Codex:\nLine1\n"
+        "## Other header:\nIgnored\n"
+    )
     active_file, open_tabs, my_request = parse_prompt_message(message)
     TC.assertIsNone(active_file)
     open_tabs_value = open_tabs or ""
@@ -648,6 +652,34 @@ def test_handle_response_item_event_calls_and_outputs(tmp_path: Path) -> None:
 
     outputs = conn.execute("SELECT output FROM function_calls ORDER BY id").fetchall()
     TC.assertEqual({row[0] for row in outputs}, {"done", "updated"})
+    conn.close()
+
+
+def test_handle_response_item_event_unknown_subtype(tmp_path: Path) -> None:
+    """handle_response_item_event should gracefully skip unknown subtypes."""
+    conn = _make_connection(tmp_path)
+    file_id, prompt_id = _create_file_and_prompt(conn, "## Test")
+    deps = _deps_with_real_inserts()
+    tracker = FunctionCallTracker()
+    counts: dict[str, int] = {"function_calls": 0}
+
+    # Unknown subtype should be silently ignored
+    handle_response_item_event(
+        deps,
+        EventContext(
+            conn=conn,
+            file_id=file_id,
+            prompt_id=prompt_id,
+            timestamp="t0",
+            payload={"type": "unknown_type", "data": "some value"},
+            raw_event={"type": "response_item"},
+            counts=counts,
+        ),
+        tracker,
+    )
+
+    # No function calls should be created
+    TC.assertEqual(counts["function_calls"], 0)
     conn.close()
 
 

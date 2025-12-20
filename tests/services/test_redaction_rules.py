@@ -234,11 +234,15 @@ def test_yaml_load_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
     yaml_path.write_text("- id: x\n  type: regex\n  pattern: x\n", encoding="utf-8")
 
     class _FakeYaml:  # pylint: disable=too-few-public-methods
+        """Minimal yaml stub for import fallback."""
+
         @staticmethod
         def safe_load(_: str) -> list[dict[str, str]]:
+            """Return a single regex rule for testing."""
             return [{"id": "x", "type": "regex", "pattern": "x"}]
 
     def _fake_import(name: str) -> object:
+        """Return fake yaml module or fall back to real import."""
         if name == "yaml":
             return _FakeYaml()
         return importlib.import_module(name)
