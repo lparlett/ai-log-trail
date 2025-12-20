@@ -4,7 +4,7 @@ Purpose: Export grouped prompts/actions with rule-based redactions applied
 by default (AI-assisted by Codex GPT-5).
 Author: Codex with Lauren Parlett
 Date: 2025-11-27
-Related tests: tests/cli/test_export_session.py
+Related tests: tests/cli/test_export_session_core.py, tests/cli/test_export_session_rendering.py
 """
 
 from __future__ import annotations
