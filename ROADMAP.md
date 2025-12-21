@@ -42,6 +42,7 @@ SQLite stays the default for single-user, local ingest, but we need a path to a 
 
 ### Issue bundle: v0.8.0 (Reporting CLI + filters)
 
+- [ ] Add CoPilot ingestion and parsing
 - [ ] Add `ai-log-trail report` modes: prompts-only; prompts + reasoning/actions; token summaries.
 - [ ] Support Markdown and CSV outputs.
 - [ ] Filters: date range, repo/workspace, session id.
