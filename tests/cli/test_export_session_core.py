@@ -289,11 +289,11 @@ class TestLookupPromptId:
 
         # Create interaction instead of prompt
         cursor.execute(
-            "INSERT INTO interactions (file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
+            "INSERT INTO interactions "
+            "(file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
             "VALUES (?, ?, ?, 1, '{}', '{}')",
             (file_id, session_id, "codex"),
         )
-        expected_id = cursor.lastrowid
         conn.commit()
 
         # Note: The export_cli._lookup_prompt_id function still uses the old prompts table

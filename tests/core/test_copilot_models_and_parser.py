@@ -21,7 +21,7 @@ import pytest
 
 from src.agents.copilot import (
     CoPilotParseError,
-    discover_copilot_sessions,
+    find_copilot_session_files,
     parse_copilot_session,
     parse_copilot_session_from_file,
 )
@@ -324,7 +324,7 @@ class TestSessionFileDiscovery(unittest.TestCase):
             session_file3 = session_dir2 / "session_3.json"
             session_file3.write_text('{"version": 3, "requests": []}')
 
-            sessions = discover_copilot_sessions(tmp_path)
+            sessions = find_copilot_session_files(tmp_path)
 
             self.assertEqual(len(sessions), 3)
             self.assertTrue(all(f.suffix == ".json" for f in sessions))
@@ -339,7 +339,7 @@ class TestSessionFileDiscovery(unittest.TestCase):
         tmp_path = Path.cwd() / ".test_copilot_empty"
         try:
             tmp_path.mkdir(exist_ok=True)
-            sessions = discover_copilot_sessions(tmp_path)
+            sessions = find_copilot_session_files(tmp_path)
             self.assertEqual(len(sessions), 0)
         finally:
             if tmp_path.exists():
@@ -347,7 +347,7 @@ class TestSessionFileDiscovery(unittest.TestCase):
 
     def test_discover_sessions_missing_directory(self) -> None:
         """Should handle missing directory gracefully."""
-        sessions = discover_copilot_sessions(Path("/nonexistent/path"))
+        sessions = find_copilot_session_files(Path("/nonexistent/path"))
         self.assertEqual(len(sessions), 0)
 
 

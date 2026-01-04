@@ -564,7 +564,8 @@ def test_list_redactions_filtering(tmp_path: Path) -> None:
 
     # Create interactions instead of prompts
     prompt_id_1 = conn.execute(
-        "INSERT INTO interactions (file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
+        "INSERT INTO interactions "
+        "(file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
         "VALUES (?, ?, ?, 1, '{}', '{}')",
         (file_id_1, session_id_1, "codex"),
     ).lastrowid
@@ -573,7 +574,8 @@ def test_list_redactions_filtering(tmp_path: Path) -> None:
     prompt_id_1 = int(prompt_id_1)
 
     prompt_id_2 = conn.execute(
-        "INSERT INTO interactions (file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
+        "INSERT INTO interactions "
+        "(file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
         "VALUES (?, ?, ?, 1, '{}', '{}')",
         (file_id_2, session_id_2, "codex"),
     ).lastrowid
@@ -639,7 +641,8 @@ def test_update_redaction_various_fields(tmp_path: Path) -> None:
 
     # Create interaction instead of prompt
     prompt_id = conn.execute(
-        "INSERT INTO interactions (file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
+        "INSERT INTO interactions "
+        "(file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
         "VALUES (?, ?, ?, 1, '{}', '{}')",
         (file_id, session_id, "codex"),
     ).lastrowid

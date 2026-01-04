@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import textwrap
 from pathlib import Path
+from typing import Any, cast
 
 import unittest
 
@@ -102,7 +103,7 @@ def test_report_many_results(capsys: pytest.CaptureFixture[str]) -> None:
             Path("file2.jsonl"), 2
         )
     )
-    summaries: list[SessionSummary] = [s1, s2]
+    summaries = cast(list[dict[str, Any]], [s1, s2])
     ingest_session._report_many_results(
         summaries, Path("db.sqlite")
     )  # pylint: disable=protected-access

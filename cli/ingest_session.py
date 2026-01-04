@@ -1,6 +1,7 @@
 ﻿"""CLI to ingest AI agent session logs into SQLite.
 
-Purpose: Command-line entry for ingesting agent session logs (Codex, CoPilot, etc.) into SQLite storage.
+Purpose: Command-line entry for ingesting agent session logs
+    (Codex, CoPilot, etc.) into SQLite storage.
 Author: Lauren Parlett
 Date: 2025-10-30
 """

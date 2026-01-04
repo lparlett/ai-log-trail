@@ -127,7 +127,7 @@ Session Files (JSONL)
 The tool provides 5 main CLI commands. See [`docs/cli.md`](docs/cli.md) for full reference and examples.
 
 | Command | Purpose | Example |
-|---------|---------|---------|
+| --- | --- | --- |
 | `ingest_session` | Load session logs into SQLite | `python -m cli.ingest_session --debug` |
 | `group_session` | Display prompts & events | `python -m cli.group_session --list` |
 | `export_session` | Export redacted session data | `python -m cli.export_session --format csv` |
@@ -139,7 +139,7 @@ The tool provides 5 main CLI commands. See [`docs/cli.md`](docs/cli.md) for full
 ## Documentation
 
 | Document | Purpose |
-|----------|---------|
+| --- | --- |
 | [`docs/architecture.md`](docs/architecture.md) | System design: components, data flow, pipelines, algorithms |
 | [`docs/schema.md`](docs/schema.md) | Database schema: table definitions, relationships, indexes |
 | [`docs/cli.md`](docs/cli.md) | CLI reference: all commands, options, examples, workflows |
@@ -210,7 +210,6 @@ These constraints will be revisited as part of resilience and scaling work.
 
 This is an "AI-assisted" project-experiments will happen-but the mandate is transparency:
 
-- Every commit notes AI assistance.
 - Raw logs remain user-owned; ingest only reads from configured paths.
 - Redactions are first-class citizens with provenance.
 

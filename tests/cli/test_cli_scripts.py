@@ -15,6 +15,7 @@ import pytest
 
 from cli import group_session, ingest_session, migrate_sqlite_to_postgres
 from src.services.config import DatabaseConfig, OutputPaths, SessionsConfig, ConfigError
+from src.services.ingest import SessionSummary
 
 TC = unittest.TestCase()
 
@@ -402,7 +403,7 @@ def test_ingest_single_and_many_paths(
 ) -> None:
     """_ingest_single_file and _ingest_many_files should print summaries."""
 
-    summary: ingest_session.SessionSummary = {
+    summary: SessionSummary = {
         "session_file": "file.jsonl",
         "file_id": 1,
         "prompts": 1,
@@ -515,7 +516,7 @@ def test_ingest_main_uses_cli_session(
     config = _fake_config(tmp_path)
     session_file = tmp_path / "s.jsonl"
     session_file.write_text("{}", encoding="utf-8")
-    summary: ingest_session.SessionSummary = {
+    summary: SessionSummary = {
         "session_file": str(session_file),
         "file_id": 1,
         "prompts": 0,

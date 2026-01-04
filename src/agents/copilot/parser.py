@@ -395,4 +395,3 @@ parse_session_from_file = parse_copilot_session_from_file
 parse_request = parse_copilot_request
 parse_variable_data = parse_copilot_variable_data
 parse_response_part = parse_copilot_response_part
-
