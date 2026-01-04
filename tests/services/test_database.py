@@ -101,14 +101,9 @@ class TestEnsureSchema:
         expected_tables = {
             "files",
             "sessions",
-            "session_context",
-            "prompts",
-            "token_messages",
-            "turn_context_messages",
-            "agent_reasoning_messages",
-            "function_plan_messages",
-            "function_calls",
-            "events",
+            "interactions",
+            "agent_events",
+            "agent_tool_invocations",
             "redaction_rules",
             "redactions",
         }
@@ -157,11 +152,11 @@ class TestEnsureSchema:
         ensure_schema(conn)
 
         cursor = conn.cursor()
-        # Try to insert a prompt with non-existent file_id
+        # Try to insert an interaction with non-existent session_id
         with pytest.raises(sqlite3.IntegrityError):
             cursor.execute(
-                "INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json) "
-                "VALUES (999, 1, '2025-01-01', 'test', '{}')"
+                "INSERT INTO interactions (file_id, session_id, agent_type, interaction_index) "
+                "VALUES (999, 999, 'codex', 0)"
             )
         conn.close()
 

@@ -1,11 +1,11 @@
-"""SQLite helpers for codex_sessions_tool.
+"""SQLite helpers for AI Log Trail.
 
 Purpose: Centralize SQLite schema management and connection helpers.
 Author: Codex with Lauren Parlett
 Date: 2025-10-30
 Related tests: tests/test_db_utils_and_handlers.py, tests/test_ingest.py,
   tests/test_redactions.py
-AI-assisted: Updated with Codex (GPT-5).
+AI-assisted: Updated with Codex (GPT-5) and Claude Haiku 4.5.
 """
 
 from __future__ import annotations
@@ -22,45 +22,69 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS files (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     path TEXT NOT NULL UNIQUE,
+    agent_type TEXT NOT NULL CHECK (agent_type IN ('codex', 'copilot')),
     ingested_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER NOT NULL UNIQUE REFERENCES files(id) ON DELETE CASCADE,
-    session_id TEXT,
-    session_timestamp TEXT,
-    raw_json TEXT
-);
-
-CREATE TABLE IF NOT EXISTS session_context (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id INTEGER NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
-    cwd TEXT,
-    approval_policy TEXT,
-    sandbox_mode TEXT,
-    network_access TEXT,
+    agent_type TEXT NOT NULL CHECK (agent_type IN ('codex', 'copilot')),
+    agent_session_id TEXT,
+    agent_metadata TEXT NOT NULL DEFAULT '{}',
+    raw_json TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS prompts (
+CREATE TABLE IF NOT EXISTS interactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    prompt_index INTEGER NOT NULL,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    agent_type TEXT NOT NULL CHECK (agent_type IN ('codex', 'copilot')),
+    interaction_index INTEGER NOT NULL,
     timestamp TEXT,
-    message TEXT,
-    active_file TEXT,
-    open_tabs TEXT,
-    my_request TEXT,
-    raw_json TEXT
+    agent_user_input TEXT,
+    agent_context TEXT NOT NULL DEFAULT '{}',
+    agent_response TEXT NOT NULL DEFAULT '{}',
+    raw_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS agent_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    interaction_id INTEGER NOT NULL REFERENCES interactions(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL CHECK (event_type IN (
+        'token_usage', 'agent_reasoning', 'context_change', 'function_plan'
+    )),
+    timestamp TEXT,
+    payload TEXT NOT NULL,
+    raw_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS agent_tool_invocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    interaction_id INTEGER NOT NULL REFERENCES interactions(id) ON DELETE CASCADE,
+    agent_type TEXT NOT NULL CHECK (agent_type IN ('codex', 'copilot')),
+    tool_name TEXT NOT NULL,
+    tool_id TEXT,
+    invocation_id TEXT,
+    call_timestamp TEXT,
+    response_timestamp TEXT,
+    tool_arguments TEXT,
+    tool_output TEXT,
+    tool_status TEXT CHECK (tool_status IN ('pending', 'success', 'error')),
+    raw_input_json TEXT,
+    raw_output_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS redaction_rules (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL CHECK (type IN ('regex', 'marker', 'literal')),
     pattern TEXT NOT NULL,
-    scope TEXT NOT NULL DEFAULT 'prompt'
-        CHECK (scope IN ('prompt', 'field', 'global')),
+    scope TEXT NOT NULL DEFAULT 'interaction'
+        CHECK (scope IN ('interaction', 'field', 'global')),
     replacement_text TEXT NOT NULL,
     rule_fingerprint TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
@@ -73,93 +97,27 @@ CREATE TABLE IF NOT EXISTS redaction_rules (
 CREATE TABLE IF NOT EXISTS redactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER REFERENCES files(id) ON DELETE CASCADE,
-    prompt_id INTEGER REFERENCES prompts(id) ON DELETE CASCADE,
+    interaction_id INTEGER REFERENCES interactions(id) ON DELETE CASCADE,
+    prompt_id INTEGER,
     rule_id TEXT REFERENCES redaction_rules(id) ON DELETE SET NULL,
     rule_fingerprint TEXT NOT NULL,
     field_path TEXT,
     reason TEXT,
     actor TEXT,
-    active INTEGER NOT NULL DEFAULT 1,
     session_file_path TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
     applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT
+    updated_at TEXT,
+    UNIQUE(file_id, prompt_id, field_path, rule_id, rule_fingerprint)
 );
 
-CREATE INDEX IF NOT EXISTS idx_redactions_prompt
-    ON redactions(prompt_id);
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_redactions_application
-    ON redactions(
-        file_id,
-        prompt_id,
-        field_path,
-        rule_id,
-        rule_fingerprint
-    );
-
-CREATE TABLE IF NOT EXISTS token_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
-    timestamp TEXT,
-    primary_used_percent REAL,
-    primary_window_minutes INTEGER,
-    primary_resets TEXT,
-    secondary_used_percent REAL,
-    secondary_window_minutes INTEGER,
-    secondary_resets TEXT,
-    raw_json TEXT
-);
-
-CREATE TABLE IF NOT EXISTS turn_context_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
-    timestamp TEXT,
-    writable_roots TEXT,
-    raw_json TEXT
-);
-
-CREATE TABLE IF NOT EXISTS agent_reasoning_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
-    timestamp TEXT,
-    source TEXT,
-    text TEXT,
-    raw_json TEXT
-);
-
-CREATE TABLE IF NOT EXISTS function_plan_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
-    timestamp TEXT,
-    name TEXT,
-    arguments TEXT,
-    raw_json TEXT
-);
-
-CREATE TABLE IF NOT EXISTS function_calls (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    prompt_id INTEGER NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
-    call_timestamp TEXT,
-    output_timestamp TEXT,
-    name TEXT,
-    call_id TEXT,
-    arguments TEXT,
-    output TEXT,
-    raw_call_json TEXT,
-    raw_output_json TEXT
-);
-
-CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    timestamp TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    category TEXT NOT NULL,
-    priority TEXT NOT NULL,
-    session_id TEXT,
-    data TEXT,
-    raw_json TEXT
-);
+CREATE INDEX IF NOT EXISTS idx_redactions_interaction
+    ON redactions(interaction_id);
+CREATE INDEX IF NOT EXISTS idx_interactions_session
+    ON interactions(session_id, agent_type);
+CREATE INDEX IF NOT EXISTS idx_tool_invocations_interaction
+    ON agent_tool_invocations(interaction_id);
 """
 
 

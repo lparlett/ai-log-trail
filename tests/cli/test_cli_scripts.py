@@ -1,4 +1,4 @@
-"""Coverage-focused tests for CLI entry points (AI-assisted by Codex GPT-5)."""
+"""Coverage-focused tests for CLI entry points (AI-assisted)."""
 
 # pylint: disable=import-error,protected-access,too-few-public-methods
 
@@ -498,7 +498,7 @@ def test_ingest_report_many_results_totals(capsys: pytest.CaptureFixture[str]) -
         "function_calls": 1,
         "errors": [{"severity": "ERROR", "code": "x", "message": "bad"}],
     }
-    summaries = cast(list[ingest_session.SessionSummary], [s1, s2])
+    summaries = cast(list[dict[str, Any]], [s1, s2])
     ingest_session._report_many_results(
         summaries, Path("db.sqlite")
     )  # pylint: disable=protected-access

@@ -5,6 +5,9 @@ user/config.toml
 __pycache__/
 *.pyc
 
+# Archive files
+*_archive.*
+
 # Ignore virtual environment directories
 .venv/
 .vscode/

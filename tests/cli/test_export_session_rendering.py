@@ -1,4 +1,4 @@
-"""Tests for export_session rendering and output (AI-assisted by Codex GPT-5).
+"""Tests for export_session rendering and output (AI-assisted).
 
 Covers event rendering, output formatting, and various payload structures
 for the export_session command-line interface.
@@ -201,16 +201,16 @@ class TestRenderExport:
 
     def test_scope_matches_global(self) -> None:
         """Should match 'global' scope against any context scope."""
-        TC.assertTrue(export_cli._scope_matches("global", "prompt"))
+        TC.assertTrue(export_cli._scope_matches("global", "interaction"))
         TC.assertTrue(export_cli._scope_matches("global", "field"))
         TC.assertTrue(export_cli._scope_matches("global", "global"))
 
     def test_scope_matches_specific(self) -> None:
         """Should match specific scopes only to same scope."""
-        TC.assertTrue(export_cli._scope_matches("prompt", "prompt"))
-        TC.assertFalse(export_cli._scope_matches("prompt", "field"))
+        TC.assertTrue(export_cli._scope_matches("interaction", "interaction"))
+        TC.assertFalse(export_cli._scope_matches("interaction", "field"))
         TC.assertTrue(export_cli._scope_matches("field", "field"))
-        TC.assertFalse(export_cli._scope_matches("field", "prompt"))
+        TC.assertFalse(export_cli._scope_matches("field", "interaction"))
 
 
 class TestRenderExportErrorPaths:

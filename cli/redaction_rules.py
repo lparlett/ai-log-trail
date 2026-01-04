@@ -74,8 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_parser.add_argument(
         "--scope",
-        choices=["prompt", "field", "global"],
-        default="prompt",
+        choices=["interaction", "field", "global"],
+        default="interaction",
         help="Scope that governs where the rule applies.",
     )
     add_parser.add_argument(

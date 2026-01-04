@@ -1,4 +1,4 @@
-"""Tests for parser interface definitions (AI-assisted by Codex GPT-5)."""
+"""Tests for parser interface definitions (AI-assisted)."""
 
 # pylint: disable=import-error,too-few-public-methods
 

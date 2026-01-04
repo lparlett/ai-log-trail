@@ -1,4 +1,4 @@
-"""Tests for rule-based redactions (AI-assisted by Codex GPT-5)."""
+"""Tests for rule-based redactions (AI-assisted)."""
 
 # pylint: disable=import-error,protected-access
 

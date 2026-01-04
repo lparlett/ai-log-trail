@@ -1,9 +1,9 @@
-"""Load user configuration for codex_sessions_tool.
+"""Load user configuration for AI Log Trail.
 
-Purpose: Load and validate user configuration for locating Codex session data.
+Purpose: Load and validate user configuration for locating AI agent session data.
 Author: Codex with Lauren Parlett
 Date: 2025-10-30
-AI-assisted: Updated with Codex (GPT-5).
+AI-assisted: Updated with Codex (GPT-5) and Claude Haiku 4.5.
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ import importlib
 import os
 from pathlib import Path
 from typing import Any
+
+from src.agents.copilot.config import CoPilotConfig
 
 try:
     _toml_module = importlib.import_module("tomllib")
@@ -45,12 +47,15 @@ class OutputPaths:
 
 @dataclass(frozen=True)
 class SessionsConfig:
-    """User-defined settings for locating Codex session logs."""
+    """User-defined settings for locating Codex and CoPilot session logs."""
 
-    sessions_root: Path
+    sessions_root: Path  # Legacy Codex root path (for backward compatibility)
+    codex_root: Path | None = None  # Explicit Codex sessions path
+    copilot_root: Path | None = None  # CoPilot sessions path
     ingest_batch_size: int = 1000
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     outputs: OutputPaths = field(default_factory=OutputPaths)
+    copilot_config: CoPilotConfig = field(default_factory=CoPilotConfig)
 
 
 def load_config(config_path: Path | None = None) -> SessionsConfig:
@@ -83,16 +88,37 @@ def load_config(config_path: Path | None = None) -> SessionsConfig:
     if not root.is_dir():
         raise ConfigError(f"Configured sessions root is not a directory: {root}")
 
+    # Load optional Codex and CoPilot roots
+    codex_root_value = sessions.get("codex_root") or sessions.get("root")
+    codex_root = (
+        Path(codex_root_value).expanduser().resolve() if codex_root_value else None
+    )
+    if codex_root and not codex_root.exists():
+        raise ConfigError(f"Configured codex_root does not exist: {codex_root}")
+
+    copilot_root_value = sessions.get("copilot_root")
+    copilot_root = (
+        Path(copilot_root_value).expanduser().resolve() if copilot_root_value else None
+    )
+    if copilot_root and not copilot_root.exists():
+        raise ConfigError(f"Configured copilot_root does not exist: {copilot_root}")
+
     ingest_config = data.get("ingest", {})
     batch_size = _load_batch_size(ingest_config)
     database_cfg = _load_database_config(ingest_config, data.get("database", {}))
     outputs_cfg = _load_outputs_config(data.get("outputs", {}))
+    copilot_cfg = _load_copilot_config(
+        data.get("agents", {}).get("copilot", {}), copilot_root
+    )
 
     return SessionsConfig(
         sessions_root=root,
+        codex_root=codex_root,
+        copilot_root=copilot_root,
         ingest_batch_size=batch_size,
         database=database_cfg,
         outputs=outputs_cfg,
+        copilot_config=copilot_cfg,
     )
 
 
@@ -244,3 +270,31 @@ def _validate_sqlite_path(
     if not os.access(parent, os.W_OK):
         raise ConfigError(f"Database parent directory is not writable: {parent}")
     return resolved
+
+
+def _load_copilot_config(
+    copilot_table: dict[str, Any] | None,
+    copilot_root: Path | None,
+) -> CoPilotConfig:
+    """Load CoPilot-specific configuration.
+
+    Args:
+        copilot_table: [agents.copilot] section from config.toml.
+        copilot_root: Resolved path to CoPilot sessions directory.
+
+    Returns:
+        CoPilotConfig instance with sensible defaults.
+    """
+    if not copilot_table:
+        copilot_table = {}
+
+    config_dict = {
+        "root_path": copilot_root,
+        "enabled": bool(copilot_root),
+        "verbose": copilot_table.get("verbose", False),
+        "batch_size": copilot_table.get("batch_size", 10),
+        "workspace_id": copilot_table.get("workspace_id"),
+        "preserve_raw_json": copilot_table.get("preserve_raw_json", True),
+    }
+
+    return CoPilotConfig.from_dict(config_dict)

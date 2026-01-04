@@ -23,7 +23,7 @@ DEFAULT_RULE_PATH = Path("user/redactions.yml")
 
 # Allowed values for rule configuration
 ALLOWED_TYPES = ("regex", "marker", "literal")
-ALLOWED_SCOPES = ("prompt", "field", "global")
+ALLOWED_SCOPES = ("interaction", "field", "global")
 
 # SQL module and regex configuration
 SQLITE_MODULE_NAME = "sqlite3"
@@ -49,7 +49,7 @@ class PayloadExtractionResult:
 class RuleOptions:
     """Optional attributes for a rule."""
 
-    scope: str = "prompt"
+    scope: str = "interaction"
     replacement: str | None = None
     enabled: bool = True
     reason: str | None = None
@@ -468,7 +468,7 @@ def _parse_rule(entry: dict[str, Any], *, source: str) -> RedactionRule:
             raise ValueError(f"Missing required key '{key}' in {source}")
 
     options = RuleOptions(
-        scope=str(entry.get("scope", "prompt")),
+        scope=str(entry.get("scope", "interaction")),
         replacement=entry.get("replacement"),
         enabled=bool(entry.get("enabled", True)),
         reason=_optional_str(entry.get("reason")),

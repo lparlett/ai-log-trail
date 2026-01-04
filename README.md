@@ -68,15 +68,13 @@ Session Files (JSONL)
 
 ## Current capabilities
 
-- **Structured ingest** - Parse Codex session directories into tables (`files`, `sessions`, `prompts`, `token_messages`, `turn_context_messages`, `agent_reasoning_messages`, `function_plan_messages`, `function_calls`) with raw JSON preserved.
+- **Structured ingest** - Parse AI agent (Codex, CoPilot, etc.) session logs into tables (`files`, `sessions`, `interactions`, `prompts`, `agent_events`) with raw JSON preserved and agent type tracked.
+- **Multi-agent support** - Automatic agent detection; schema accommodates Codex (JSONL), CoPilot (JSON), and extensible to other agents.
 - **Redaction storage** - `redactions` table tracks prompt/field/global scopes with replacement text, actor, reason, and timestamps for provenance.
-- **Rule-based redaction** - YAML/JSON rule file (`user/redactions.yml` seeded with
-  defaults for emails, tokens, paths, troubleshooting snippets, and `[redact ...]`
-  markers) applied in file order with per-rule counts in summaries; manual DB
-  redactions still take precedence.
+- **Rule-based redaction** - YAML/JSON rule file (`user/redactions.yml` seeded with defaults for emails, tokens, paths, troubleshooting snippets, and `[redact ...]` markers) applied in file order with per-rule counts in summaries; manual DB redactions still take precedence.
 - **CLI utilities**
   - `python -m cli.group_session` groups events under each prompt for quick console or file review and writes to `[outputs].reports_dir` by default.
-  - `python -m cli.ingest_session` ingests one or many sessions into SQLite with `--limit`, `--debug`, and `--verbose` modes using the configured database path.
+  - `python -m cli.ingest_session` ingests one or many session files into SQLite with `--limit`, `--debug`, and `--verbose` modes using the configured database path.
 - **Governance docs** - `AGENTS.md` sets behavioral guardrails; `ROADMAP.md` tracks milestones through v1.0.0 and beyond.
 - **Config scaffolding** - `user/config.example.toml` seeds per-user setup; actual secrets stay local via `.gitignore`.
 - **Migration docs** - `docs/migration.md` explains SQLite to Postgres migration, dry-run, and rollback steps.
@@ -164,8 +162,8 @@ The tool provides 5 main CLI commands. See [`docs/cli.md`](docs/cli.md) for full
 
 #### SessionDiscoveryError: no sessions found
 
-- Verify Codex logs are in the configured directory under `YYYY/MM/DD/` structure
-- Run `ls -la /path/to/sessions/2025/` to check
+- Verify session logs are in the configured directory under `YYYY/MM/DD/` structure (Codex) or direct JSON files (CoPilot).
+- Run `ls -la /path/to/sessions/2025/` to check Codex structure, or `ls -la /path/to/copilot/` for CoPilot files.
 
 #### EventValidationError: Missing required field 'type'
 
@@ -198,7 +196,7 @@ Beyond v1.0.0 we're targeting tagging, audit trails, API integrations, VS Code e
 ## Operational assumptions
 
 - **Architecture** - Components are wired manually; no dependency injection framework is in place yet. Larger deployments should plan for DI or service registries before extending the tool.
-- **Session paths** - Ingest expects Codex logs under `~/.codex/sessions/<year>/<month>/<day>/file.jsonl` (or the Windows equivalent). Symlinks and junctions must preserve this structure and point to readable directories; atypical mount points are not traversed automatically.
+- **Session paths** - Ingest expects Codex logs under `~/.codex/sessions/<year>/<month>/<day>/file.jsonl` (or Windows equivalent) and CoPilot logs under `~/Library/Application Support/Code/User/workspaceStorage/*/chatSessions/*.json` (macOS) or equivalent Windows/Linux paths. Symlinks and junctions must preserve this structure and point to readable directories; atypical mount points are not traversed automatically.
 - **Memory profile** - JSON payloads are read as-is with no max size enforcement. Very large sessions can exhaust memory; split oversized logs before ingesting or ingest them incrementally.
 - **Concurrency** - SQLite writes run in a single process and rely on SQLite's default locking. Running multiple ingests against the same database concurrently is unsupported and may deadlock.
 - **Encoding** - All file I/O assumes UTF-8. Convert logs encoded differently before processing.

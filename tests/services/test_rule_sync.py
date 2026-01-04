@@ -1,4 +1,4 @@
-"""Tests for syncing redaction rules into the database (AI-assisted by Codex GPT-5)."""
+"""Tests for syncing redaction rules into the database (AI-assisted)."""
 
 from __future__ import annotations
 
@@ -25,46 +25,55 @@ def _make_conn(tmp_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def _seed_prompt(conn: sqlite3.Connection) -> int:
+def _seed_interaction(conn: sqlite3.Connection) -> int:
     file_id = conn.execute(
-        "INSERT INTO files (path) VALUES ('/tmp/test.jsonl')"
+        "INSERT INTO files (path, agent_type) VALUES ('/tmp/test.jsonl', 'codex')"
     ).lastrowid
     TC.assertIsNotNone(file_id)
     file_id_int = cast(int, file_id)
-    prompt_insert = """
-        INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json)
-        VALUES (?, 1, 't', 'msg', '{}')
-    """
-    prompt_id = conn.execute(prompt_insert, (file_id_int,)).lastrowid
-    TC.assertIsNotNone(prompt_id)
-    return cast(int, prompt_id)
+
+    session_id = conn.execute(
+        "INSERT INTO sessions (file_id, agent_type) VALUES (?, 'codex')",
+        (file_id_int,)
+    ).lastrowid
+    TC.assertIsNotNone(session_id)
+    session_id_int = cast(int, session_id)
+
+    interaction_id = conn.execute(
+        """INSERT INTO interactions 
+           (file_id, session_id, agent_type, interaction_index)
+           VALUES (?, ?, 'codex', 0)""",
+        (file_id_int, session_id_int)
+    ).lastrowid
+    TC.assertIsNotNone(interaction_id)
+    return cast(int, interaction_id)
 
 
 def test_sync_rules_soft_disables_missing_and_redactions(tmp_path: Path) -> None:
     """Rules missing from the file should be disabled and linked redactions inactivated."""
 
     conn = _make_conn(tmp_path)
-    prompt_id = _seed_prompt(conn)
+    interaction_id = _seed_interaction(conn)
     conn.execute(
         """
         INSERT INTO redaction_rules
         (id, type, pattern, scope, replacement_text, rule_fingerprint, enabled)
-        VALUES ('old', 'regex', 'secret', 'prompt', '<X>', 'fp-old', 1)
+        VALUES ('old', 'regex', 'secret', 'interaction', '<X>', 'fp-old', 1)
         """
     )
     conn.execute(
         """
-        INSERT INTO redactions (prompt_id, rule_id, rule_fingerprint, active, applied_at)
+        INSERT INTO redactions (interaction_id, rule_id, rule_fingerprint, active, applied_at)
         VALUES (?, 'old', 'fp-old', 1, datetime('now'))
         """,
-        (prompt_id,),
+        (interaction_id,),
     )
 
     new_rule = RedactionRule(
         id="new",
         type="literal",
         pattern="token",
-        options=RuleOptions(scope="prompt", replacement="<R>"),
+        options=RuleOptions(scope="interaction", replacement="<R>"),
     )
     sync_rules_to_db(conn, [new_rule])
 

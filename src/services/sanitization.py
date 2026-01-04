@@ -1,9 +1,9 @@
 """Utilities that redact sensitive values from JSON-compatible structures.
 
-Purpose: Sanitize Codex session JSON payloads before persistence.
+Purpose: Sanitize AI agent session JSON payloads before persistence.
 Author: Codex with Lauren Parlett
 Date: 2025-10-30
-AI-assisted: Generated with Codex (GPT-5).
+AI-assisted: Generated with Codex (GPT-5) and Claude Haiku 4.5.
 """
 
 from __future__ import annotations

@@ -371,7 +371,7 @@ def _scope_matches(rule_scope: str, context_scope: str) -> bool:
 
     if rule_scope == "global":
         return True
-    if rule_scope == "prompt" and context_scope == "prompt":
+    if rule_scope == "interaction" and context_scope == "interaction":
         return True
     if rule_scope == "field" and context_scope == "field":
         return True

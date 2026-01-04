@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator, cast
+from typing import Any, Iterator, cast, Generator
 
 from ...core.interfaces.parser import AgentLogMetadata, ILogParser
 from ...core.models.base_event import BaseEvent
@@ -297,3 +297,27 @@ class CodexParser(ILogParser):
             return self._validate_message_event(payload)
 
         return False
+
+    def find_log_files(self, root_path: Path) -> Generator[Path, None, None]:
+        """Find all Codex session files in the given root directory.
+
+        Codex stores JSONL logs in a date-based hierarchy:
+        /YYYY/MM/DD/*.jsonl
+
+        Args:
+            root_path: Root directory to search
+
+        Returns:
+            Generator yielding Path objects for session files
+        """
+        # Codex uses JSONL files organized by date (year/month/day)
+        for jsonl_file in root_path.glob("**/*.jsonl"):
+            yield jsonl_file
+
+    def get_agent_type(self) -> str:
+        """Get the agent type identifier.
+
+        Returns:
+            String identifier for this agent type ("codex")
+        """
+        return self.agent_type

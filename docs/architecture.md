@@ -106,7 +106,7 @@ ingest_session_file(config, file_path)
 
 #### redaction_rules.py — Rule Management
 
-- `RedactionRule` — Dataclass: type (regex/marker/literal), pattern, scope (field/prompt/global), replacement, options (ignore_case, dotall)
+- `RedactionRule` — Dataclass: type (regex/marker/literal), pattern, scope (field/interaction/global), replacement, options (ignore_case, dotall)
 - `load_rules()` — Parse user/redactions.yml into RedactionRule instances
 - `apply_rules()` — Iterate rules in order, match patterns, generate RuleSummary (count, fingerprint)
 - `RuleSummary` — TypedDict: rule_id, count, replacement_text
@@ -355,7 +355,7 @@ function_calls (FK: prompt_id)
 redaction_rules
   ├─ id (PK = rule name)
   ├─ type (regex|marker|literal)
-  ├─ pattern, scope (field|prompt|global)
+  ├─ pattern, scope (field|interaction|global)
   ├─ replacement_text, rule_fingerprint
   ├─ enabled, reason, actor
   └─ created_at, updated_at

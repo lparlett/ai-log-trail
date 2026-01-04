@@ -1,6 +1,6 @@
-﻿"""Simple CLI to group Codex session events by user prompts.
+﻿"""Simple CLI to group AI agent session events by user prompts.
 
-Purpose: Provide human-readable grouping of Codex session logs for quick review.
+Purpose: Provide human-readable grouping of session logs for quick review.
 Author: Codex with Lauren Parlett
 Date: 2025-10-30
 """
@@ -172,7 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build argument parser for the CLI."""
 
     parser = argparse.ArgumentParser(
-        description="Group Codex session events by user prompts.",
+        description="Group AI agent session events by user prompts.",
     )
     parser.add_argument(
         "--output",

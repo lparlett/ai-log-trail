@@ -19,13 +19,13 @@
 - id: bracketed_troubleshooting
   type: regex
   pattern: "\\[[^\\]]{8,}\\]"
-  scope: prompt
+  scope: interaction
   enabled: true
   reason: "default troubleshooting snippet redaction"
 - id: inline_marker
   type: marker
   pattern: "\\[redact\\s+(?P<content>.+?)\\]"
-  scope: prompt
+  scope: interaction
   dotall: true
   enabled: true
   reason: "default inline marker redaction"

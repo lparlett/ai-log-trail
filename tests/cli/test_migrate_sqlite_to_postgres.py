@@ -1,4 +1,4 @@
-"""Additional tests for migrate_sqlite_to_postgres (AI-assisted by Codex GPT-5)."""
+"""Additional tests for migrate_sqlite_to_postgres (AI-assisted)."""
 
 # pylint: disable=import-error,protected-access,too-few-public-methods
 

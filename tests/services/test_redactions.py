@@ -1,4 +1,4 @@
-"""Tests for redaction CRUD helpers (AI-assisted by Codex GPT-5)."""
+"""Tests for redaction CRUD helpers (AI-assisted)."""
 
 # pylint: disable=import-error
 
@@ -34,24 +34,42 @@ def _make_connection(tmp_path: Path) -> sqlite3.Connection:
 
 
 def _insert_prompt(conn: sqlite3.Connection, *, path_suffix: str = "") -> int:
-    """Insert minimal file + prompt rows for FK coverage."""
+    """Insert minimal file + interaction rows for FK coverage."""
 
     file_path = f"tests/redactions{path_suffix}.jsonl"
     file_id = conn.execute(
-        "INSERT INTO files (path) VALUES (?)", (file_path,)
+        "INSERT INTO files (path, agent_type) VALUES (?, ?)",
+        (file_path, "codex"),
     ).lastrowid
     if file_id is None:
         raise RuntimeError("Failed to insert file row for test setup.")
-    prompt_id = conn.execute(
+
+    # Create a session for the file
+    session_id = conn.execute(
         """
-        INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json)
-        VALUES (?, 1, 't0', 'prompt', '{}')
+        INSERT INTO sessions (file_id, agent_type, agent_metadata)
+        VALUES (?, ?, '{}')
         """,
-        (int(file_id),),
+        (int(file_id), "codex"),
     ).lastrowid
-    if prompt_id is None:
-        raise RuntimeError("Failed to insert prompt row for test setup.")
-    return int(prompt_id)
+    if session_id is None:
+        raise RuntimeError("Failed to insert session row for test setup.")
+
+    # Create an interaction (replaces old prompts)
+    interaction_id = conn.execute(
+        """
+        INSERT INTO interactions (
+            file_id, session_id, agent_type, interaction_index,
+            agent_context, agent_response
+        )
+        VALUES (?, ?, ?, 1, '{}', '{}')
+        """,
+        (int(file_id), int(session_id), "codex"),
+    ).lastrowid
+    if interaction_id is None:
+        raise RuntimeError("Failed to insert interaction row for test setup.")
+
+    return int(interaction_id)
 
 
 def test_create_and_get_redaction(tmp_path: Path) -> None:
@@ -468,7 +486,8 @@ def test_create_redaction_all_fields(tmp_path: Path) -> None:
     """create_redaction should persist all provided fields."""
     conn = _make_connection(tmp_path)
     file_id = conn.execute(
-        "INSERT INTO files (path) VALUES (?)", ("test.jsonl",)
+        "INSERT INTO files (path, agent_type) VALUES (?, ?)",
+        ("test.jsonl", "codex"),
     ).lastrowid
     if file_id is None:
         TC.fail("Failed to insert file")
@@ -516,37 +535,50 @@ def test_list_redactions_filtering(tmp_path: Path) -> None:
     """list_redactions should filter by prompt_id correctly."""
     conn = _make_connection(tmp_path)
 
-    # Insert two files/prompts
+    # Insert two files/prompts (using interactions instead of old prompts table)
     file_id_1 = conn.execute(
-        "INSERT INTO files (path) VALUES (?)", ("test1.jsonl",)
+        "INSERT INTO files (path, agent_type) VALUES (?, ?)",
+        ("test1.jsonl", "codex"),
     ).lastrowid
     if file_id_1 is None:
         TC.fail("Failed to insert file 1")
     file_id_1 = int(file_id_1)
 
     file_id_2 = conn.execute(
-        "INSERT INTO files (path) VALUES (?)", ("test2.jsonl",)
+        "INSERT INTO files (path, agent_type) VALUES (?, ?)",
+        ("test2.jsonl", "codex"),
     ).lastrowid
     if file_id_2 is None:
         TC.fail("Failed to insert file 2")
     file_id_2 = int(file_id_2)
 
+    # Create sessions for each file
+    session_id_1 = conn.execute(
+        "INSERT INTO sessions (file_id, agent_type, agent_metadata) VALUES (?, ?, '{}')",
+        (file_id_1, "codex"),
+    ).lastrowid
+    session_id_2 = conn.execute(
+        "INSERT INTO sessions (file_id, agent_type, agent_metadata) VALUES (?, ?, '{}')",
+        (file_id_2, "codex"),
+    ).lastrowid
+
+    # Create interactions instead of prompts
     prompt_id_1 = conn.execute(
-        "INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json) "
-        "VALUES (?, 1, 't0', 'test1', '{}')",
-        (file_id_1,),
+        "INSERT INTO interactions (file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
+        "VALUES (?, ?, ?, 1, '{}', '{}')",
+        (file_id_1, session_id_1, "codex"),
     ).lastrowid
     if prompt_id_1 is None:
-        TC.fail("Failed to insert prompt 1")
+        TC.fail("Failed to insert interaction 1")
     prompt_id_1 = int(prompt_id_1)
 
     prompt_id_2 = conn.execute(
-        "INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json) "
-        "VALUES (?, 1, 't0', 'test2', '{}')",
-        (file_id_2,),
+        "INSERT INTO interactions (file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
+        "VALUES (?, ?, ?, 1, '{}', '{}')",
+        (file_id_2, session_id_2, "codex"),
     ).lastrowid
     if prompt_id_2 is None:
-        TC.fail("Failed to insert prompt 2")
+        TC.fail("Failed to insert interaction 2")
     prompt_id_2 = int(prompt_id_2)
 
     # Create redactions for both prompts
@@ -592,15 +624,24 @@ def test_update_redaction_various_fields(tmp_path: Path) -> None:
 
     # Insert file and prompt
     file_id = conn.execute(
-        "INSERT INTO files (path) VALUES (?)", ("test.jsonl",)
+        "INSERT INTO files (path, agent_type) VALUES (?, ?)",
+        ("test.jsonl", "codex"),
     ).lastrowid
     if file_id is None:
         TC.fail("Failed to insert file")
     file_id = int(file_id)
+
+    # Create session
+    session_id = conn.execute(
+        "INSERT INTO sessions (file_id, agent_type, agent_metadata) VALUES (?, ?, '{}')",
+        (file_id, "codex"),
+    ).lastrowid
+
+    # Create interaction instead of prompt
     prompt_id = conn.execute(
-        "INSERT INTO prompts (file_id, prompt_index, timestamp, message, raw_json) "
-        "VALUES (?, 1, 't0', 'test', '{}')",
-        (file_id,),
+        "INSERT INTO interactions (file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
+        "VALUES (?, ?, ?, 1, '{}', '{}')",
+        (file_id, session_id, "codex"),
     ).lastrowid
     if prompt_id is None:
         TC.fail("Failed to insert prompt")

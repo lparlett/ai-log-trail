@@ -29,10 +29,9 @@ Each entry in the YAML/JSON list supports:
 - `pattern` (required): regex pattern for `regex` rules; marker regex for `marker`.
   - For `literal`, `pattern` is the exact text to match; it is escaped internally
   so special regex characters are treated literally.
-- `scope` (optional, default `prompt`):
-  - `prompt`: applies only to the user's prompt text before any structured
-    redactions. It does **not** touch agent responses. Example: strip emails
-    anywhere in the prompt body.
+- `scope` (optional, default `interaction`):
+  - `interaction`: applies to the agent interaction level (e.g., user prompts and agent responses).
+    Example: strip emails anywhere in the interaction.
   - `field`: applies to specific structured fields (e.g., message bodies)
     when integrated into field-level processing. Example: target
     `raw_json.events[0].payload` without touching other fields. Field targets

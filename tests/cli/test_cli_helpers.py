@@ -1,4 +1,4 @@
-"""Tests for CLI helper functions and utilities (AI-assisted by Codex GPT-5).
+"""Tests for CLI helper functions and utilities (AI-assisted).
 
 Tests core CLI functionality including argument parsing, configuration loading,
 path resolution, and output formatting for ingest_session and group_session.

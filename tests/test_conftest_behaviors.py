@@ -1,4 +1,4 @@
-"""Targeted tests for conftest module behavior (AI-assisted by Codex GPT-5)."""
+"""Targeted tests for conftest module behavior (AI-assisted)."""
 
 from __future__ import annotations
 

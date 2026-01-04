@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Migrate Codex session data from SQLite to Postgres. "
+            "Migrate AI agent session data from SQLite to Postgres. "
             "A dry-run validation always executes before any data is copied."
         ),
     )

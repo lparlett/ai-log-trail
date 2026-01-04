@@ -1,4 +1,4 @@
-"""CLI tests for managing redaction rules (AI-assisted by Codex GPT-5)."""
+"""CLI tests for managing redaction rules (AI-assisted)."""
 
 from __future__ import annotations
 

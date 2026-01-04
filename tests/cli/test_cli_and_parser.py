@@ -1,4 +1,4 @@
-"""Tests for group_session CLI and session_parser utilities (AI-assisted by Codex GPT-5).
+"""Tests for group_session CLI and session_parser utilities (AI-assisted).
 
 Tests session event parsing, rendering, and grouping functionality for
 working with Codex session logs and user message prompts/responses.

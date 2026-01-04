@@ -50,8 +50,8 @@ CREATE TABLE IF NOT EXISTS redaction_rules (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL CHECK (type IN ('regex', 'marker', 'literal')),
     pattern TEXT NOT NULL,
-    scope TEXT NOT NULL DEFAULT 'prompt'
-        CHECK (scope IN ('prompt', 'field', 'global')),
+    scope TEXT NOT NULL DEFAULT 'interaction'
+        CHECK (scope IN ('interaction', 'field', 'global')),
     replacement_text TEXT NOT NULL,
     rule_fingerprint TEXT NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,

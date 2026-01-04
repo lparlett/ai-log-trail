@@ -1,4 +1,4 @@
-"""Tests for core base types (AI-assisted by Codex GPT-5)."""
+"""Tests for core base types (AI-assisted)."""
 
 # pylint: disable=abstract-method
 

@@ -1,7 +1,7 @@
-﻿"""CLI to ingest Codex session logs into SQLite.
+﻿"""CLI to ingest AI agent session logs into SQLite.
 
-Purpose: Command-line entry for ingesting Codex session logs into SQLite storage.
-Author: Codex with Lauren Parlett
+Purpose: Command-line entry for ingesting agent session logs (Codex, CoPilot, etc.) into SQLite storage.
+Author: Lauren Parlett
 Date: 2025-10-30
 """
 
@@ -12,17 +12,16 @@ import logging
 import os
 from collections import Counter
 from pathlib import Path
-from typing import Any, List, Sequence
+from typing import Any, Sequence
 
 from src.parsers.session_parser import SessionDiscoveryError
 from src.services.config import ConfigError, load_config, SessionsConfig
 from src.services.ingest import (
     ingest_session_file,
     ingest_sessions_in_directory,
-    SessionSummary,
 )
 
-__all__: list[str] = ["SessionDiscoveryError", "SessionSummary", "load_config", "main"]
+__all__: list[str] = ["SessionDiscoveryError", "load_config", "main"]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
         argparse.ArgumentParser: _parser instance
     """
     parser = argparse.ArgumentParser(
-        description=("Ingest the earliest Codex session into an " "SQLite database."),
+        description=("Ingest AI agent session logs into an SQLite database."),
     )
     parser.add_argument(
         "--database",
@@ -172,7 +171,7 @@ def _ingest_many_files(
     limit: int | None,
     verbose: bool,
     batch_size: int,
-) -> List[SessionSummary]:
+) -> list[dict[str, Any]]:
     """Ingest multiple session files from a directory and return summaries."""
     try:
         return list(
@@ -212,7 +211,7 @@ def _print_error_details(errors: Any, indent: str = "  ") -> int:
 
 
 def _report_many_results(
-    summaries: Sequence[SessionSummary],
+    summaries: Sequence[dict[str, Any]],
     database: Path,
 ) -> None:
     """Print a summary report for multiple ingested session files."""
@@ -241,7 +240,7 @@ def _report_many_results(
 def _print_single_summary(
     session_file: Path,
     database: Path,
-    summary: SessionSummary,
+    summary: dict[str, Any],
 ) -> None:
     """Print a summary report for a single ingested session file."""
     print(f"Ingested session file: {session_file}")

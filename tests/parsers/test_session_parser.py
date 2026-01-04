@@ -1,4 +1,4 @@
-"""Tests for session_parser module (AI-assisted by Codex GPT-5).
+"""Tests for session_parser module (AI-assisted).
 
 Purpose: Test all functions, branches, and edge cases in session_parser.
 Content: Session discovery, file loading, event parsing, and user message grouping.
