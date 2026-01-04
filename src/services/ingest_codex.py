@@ -32,7 +32,7 @@ from src.services.sanitization import sanitize_json
 def _batch_load_session_events(
     file_path: Path,
     batch_size: int = 1000,
-):
+) -> Any:
     """Load JSONL events in batches to manage memory for large files.
 
     Args:
@@ -109,7 +109,7 @@ def ingest_codex_session_file(  # pylint: disable=unused-argument
     for batch in _batch_load_session_events(session_file, batch_size):
         for event in batch:
             if not isinstance(event, dict):
-                continue  # type: ignore[unreachable]
+                continue
 
             # Sanitize entire event before storing (prevents secret leaks in raw_json)
             sanitized_event = sanitize_json(event)
