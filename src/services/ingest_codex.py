@@ -30,7 +30,8 @@ from src.services.sanitization import sanitize_json
 
 
 def _batch_load_session_events(
-    file_path: Path, batch_size: int = 1000,
+    file_path: Path,
+    batch_size: int = 1000,
 ):
     """Load JSONL events in batches to manage memory for large files.
 
@@ -59,6 +60,7 @@ def _batch_load_session_events(
     # Yield remaining events
     if batch:
         yield batch
+
 
 logger = logging.getLogger(__name__)
 

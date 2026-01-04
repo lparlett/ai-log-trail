@@ -122,7 +122,7 @@ def test_copilot_ingestion_preserves_transaction() -> None:
 
     This tests Issue #3: ingest_copilot.py was doing internal commit/rollback,
     breaking the outer transaction. Now it respects caller's transaction management.
-    
+
     Note: This is a simplified test that the ingest function can be called without
     internal transaction violations. Full integration test handled in test_ingest_agents.py.
     """

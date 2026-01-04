@@ -33,8 +33,7 @@ def _seed_interaction(conn: sqlite3.Connection) -> int:
     file_id_int = cast(int, file_id)
 
     session_id = conn.execute(
-        "INSERT INTO sessions (file_id, agent_type) VALUES (?, 'codex')",
-        (file_id_int,)
+        "INSERT INTO sessions (file_id, agent_type) VALUES (?, 'codex')", (file_id_int,)
     ).lastrowid
     TC.assertIsNotNone(session_id)
     session_id_int = cast(int, session_id)
@@ -43,7 +42,7 @@ def _seed_interaction(conn: sqlite3.Connection) -> int:
         """INSERT INTO interactions 
            (file_id, session_id, agent_type, interaction_index)
            VALUES (?, ?, 'codex', 0)""",
-        (file_id_int, session_id_int)
+        (file_id_int, session_id_int),
     ).lastrowid
     TC.assertIsNotNone(interaction_id)
     return cast(int, interaction_id)
