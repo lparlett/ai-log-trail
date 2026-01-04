@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Defines Codex's expected behavior and project conventions for the
-**Codex-Sessions-Tool** repository. Goals: reproducibility, privacy, and
+Defines agent's expected behavior and project conventions for the
+**AI Audit Trail** repository. Goals: reproducibility, privacy, and
 clarity.
 
 ## Environment
@@ -11,6 +11,24 @@ clarity.
 * Python 3.12 (virtual env `.venv/`)
 * SQLite database (`sqlite3`)
 * Do not assume root/sudo access or system-level writes.
+
+---
+
+## Platform Constraints
+
+* **Windows-First Development:**
+  * This project runs exclusively on Windows with PowerShell 5.1+
+  * Always use PowerShell cmdlets and language features, never Unix utilities
+  * Translate Unix commands to PowerShell equivalents:
+    * `tail` → `Select-Object -Last N`
+    * `head` → `Select-Object -First N`
+    * `grep` → `Select-String`
+    * `ls` / `find` → `Get-ChildItem`
+    * `cat` → `Get-Content`
+    * `sed` / `awk` → PowerShell string methods or loops
+    * `chmod` → `Set-ItemProperty -Path ... -Name Attributes`
+  * When uncertain about a command's availability, default to PowerShell native cmdlets
+  * If a tool doesn't exist in PowerShell, research before suggesting it
 
 ---
 
@@ -30,7 +48,7 @@ tests/                # Pytest suites and fixtures
 user/                 # User-provided configuration (gitignored)
 ```
 
-Input (Codex session logs) comes from a user-supplied path. The tool reads
+Input (AI agent session logs) comes from a user-supplied path. The tool reads
 but does not store raw logs without explicit consent.
 
 For Copilot chat sessions (VS Code), logs are typically stored under:
@@ -48,10 +66,11 @@ cli/ -> src/parsers/ -> src/services/ -> SQLite
 
 Key flows:
 
-1. CLI validates config and finds session files.
-2. Parser loads JSONL and groups by user messages.
+1. CLI validates config and finds session files (Codex or CoPilot).
+2. Agent-specific parser (codex.parser, copilot.parser) normalizes to
+   agent-agnostic schema.
 3. Services validate/sanitize content and persist to SQLite.
-4. Raw JSON is preserved alongside structured data.
+4. Raw JSON is preserved alongside structured data (with sanitization applied).
 
 Event processing pipeline (see `src/services/ingest.py`):
 
@@ -59,13 +78,30 @@ Event processing pipeline (see `src/services/ingest.py`):
 raw_events -> validate -> sanitize -> group -> process -> persist
 ```
 
+Agent-Agnostic Schema:
+
+* **files**: Track ingested session files (path, agent_type)
+* **sessions**: Session-level metadata (agent_type, agent_session_id)
+* **interactions**: Normalized exchanges with both Codex and CoPilot data;
+  uses agent_type to distinguish source and interaction_index (1-based) for
+  ordering
+* **agent_events**: Structured events (token_usage, agent_reasoning,
+  context_change, function_plan) tagged with interaction_id
+* **agent_tool_invocations**: Tool calls with invocation lifecycle
+* **redactions**: Audit trail of applied redactions (scope limited to
+  interaction, field, global)
+
 Database interactions:
 
 * Validation occurs via `src/services/validation.py` before any SQLite writes.
-* Sensitive fields are redacted in memory by `src/services/sanitization.py`.
-* Writers (for example `src/parsers/handlers/db_utils.py`) must use
+* Sensitive fields are redacted in memory by `src/services/sanitization.py`
+  before raw_json storage (prevents secret leaks).
+* Writers (for example `src/parsers/handlers/db_agent_utils.py`) must use
   parameterized SQL only.
-* Tables use cascading foreign keys from files -> prompts -> messages.
+* Schema is agent-agnostic: unified tables (interactions, agent_events) with
+  agent_type discriminator field support both Codex and CoPilot agents.
+* Tables use cascading foreign keys from files -> sessions -> interactions ->
+  agent_events.
 * Raw JSON is stored in *_json columns for audit/reprocessing.
 * Each ingestion runs in a single transaction.
 
@@ -100,10 +136,11 @@ data, and be included in ingestion summaries.
 
 ## Codex Sessions Log Files
 
-Codex divides its JSONL session logs first by year, then month, and then day
-directories. An example of that is shown below. It demonstrates the nested
-directories and one log file for 10/30/2025. If multiple chat sessions occur,
-then more than one file will be in that same "day" folder.
+Both Codex and CoPilot sessions are ingested and stored in an agent-agnostic
+schema, but files are discovered differently:
+
+**Codex JSONL format** divides its logs first by year, month, and day
+directories:
 
 ```text
 .codex/sessions/
@@ -116,8 +153,14 @@ then more than one file will be in that same "day" folder.
 
 On Windows this defaults to `C:\Users\<user>\.codex\sessions\2025\10\30\<file>.jsonl`.
 On macOS and Linux the equivalent location is `~/.codex/sessions/2025/10/30/<file>.jsonl`.
+
+**CoPilot sessions** (VS Code) are stored as JSON files under:
+`C:\Users\<windows_user>\AppData\Roaming\Code\User\workspaceStorage\<hashed_workspace>\chatSessions\`
+
 If logs are copied elsewhere, preserve this hierarchy or update configuration
-so the tool can discover sessions predictably.
+so the tool can discover sessions predictably. The ingest pipeline will
+auto-detect agent_type based on file format (JSONL → Codex, JSON →
+CoPilot) and normalize both to the unified schema.
 
 ## Session Data Governance
 
@@ -304,4 +347,4 @@ ProcessingError(
 
 ---
 
-Last updated: 2025-11-23
+Last updated: 2026-01-03

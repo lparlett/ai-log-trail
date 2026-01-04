@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Callable
 from unittest.mock import MagicMock
 
-import pytest
 from pytest import MonkeyPatch
 
 import cli.export_session as export_cli
@@ -267,7 +266,6 @@ class TestLookupPromptId:
 
         TC.assertIsNone(prompt_id)
 
-    @pytest.mark.skip(reason="export_cli._lookup_prompt_id needs schema update")
     def test_lookup_prompt_id_with_file_and_index(self, tmp_path: Path) -> None:
         """Lookup should return ID for existing interaction."""
         conn = get_connection(tmp_path / "db.sqlite")
@@ -287,21 +285,20 @@ class TestLookupPromptId:
         )
         session_id = cursor.lastrowid
 
-        # Create interaction instead of prompt
+        # Create interaction
         cursor.execute(
             "INSERT INTO interactions "
             "(file_id, session_id, agent_type, interaction_index, agent_context, agent_response) "
             "VALUES (?, ?, ?, 1, '{}', '{}')",
             (file_id, session_id, "codex"),
         )
+        interaction_id = cursor.lastrowid
         conn.commit()
 
-        # Note: The export_cli._lookup_prompt_id function still uses the old prompts table
-        # This test documents that the function needs to be updated to use interactions
-        # For now, we expect it to fail since prompts table no longer exists
-        # When export_cli is updated, this test should be adjusted accordingly
+        # Lookup should now find the interaction
+        result = export_cli._lookup_prompt_id(conn, file_id, 1)
+        TC.assertEqual(result, interaction_id)
 
-    @pytest.mark.skip(reason="export_cli._lookup_prompt_id needs schema update")
     def test_lookup_prompt_id_nonexistent_prompt_for_file(self, tmp_path: Path) -> None:
         """Lookup should return None when file exists but prompt doesn't."""
         conn = get_connection(tmp_path / "db.sqlite")

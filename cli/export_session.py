@@ -180,7 +180,7 @@ def _render_export(
             file_id=file_id,
             prompt_id=prompt_id_for_group,
             session_file_path=str(session_file),
-            scope="prompt",
+            scope="interaction",
             field_path="prompt.message",
         )
         redaction_counts.update(prompt_counts)
@@ -428,15 +428,19 @@ def _lookup_file_id(conn: Any, session_file: Path) -> int | None:
 
 
 def _lookup_prompt_id(conn: Any, file_id: int | None, prompt_index: int) -> int | None:
-    """Return prompt id for the given file and prompt index, if present."""
+    """Return interaction id for the given file and prompt index (interaction_index).
+
+    Note: The prompts table has been replaced with interactions table.
+    This function now returns the interaction id (which serves the same purpose).
+    """
 
     if file_id is None:
         return None
     placeholder = "?" if conn.__class__.__module__.startswith("sqlite3") else "%s"
     cursor = conn.cursor()
     cursor.execute(
-        f"SELECT id FROM prompts WHERE file_id = {placeholder} "
-        f"AND prompt_index = {placeholder}",  # nosec B608
+        f"SELECT id FROM interactions WHERE file_id = {placeholder} "
+        f"AND interaction_index = {placeholder}",  # nosec B608
         (file_id, prompt_index),
     )
     row = cursor.fetchone()

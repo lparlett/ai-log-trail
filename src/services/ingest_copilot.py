@@ -46,9 +46,13 @@ def build_copilot_session_metadata(session: Session) -> dict[str, Any]:
     }
 
 
-def build_copilot_request_user_input(request: Request) -> str:
-    """Extract user input from CoPilot request (message parts as JSON)."""
-    # Store the full message structure as JSON string
+def build_copilot_request_user_input(request: Request) -> dict[str, Any]:
+    """Extract user input from CoPilot request (message parts as dict).
+
+    Builds the message structure as a dictionary (not yet JSON) to allow
+    for proper sanitization of individual message parts before serialization.
+    """
+    # Build message as dict first to allow sanitization
     message_dict = {
         "parts": [
             {
@@ -76,7 +80,7 @@ def build_copilot_request_user_input(request: Request) -> str:
             for part in request.message.parts
         ]
     }
-    return json_dumps(message_dict)
+    return message_dict  # Return dict, not JSON string (caller will handle conversion)
 
 
 def build_copilot_request_context(request: Request) -> dict[str, Any]:
@@ -121,12 +125,17 @@ def ingest_copilot_session_file(
     """Ingest a single CoPilot session file into agent-agnostic schema.
 
     Args:
-        conn: SQLite connection with schema initialized
+        conn: SQLite connection with schema initialized and active transaction
         session_file: Path to CoPilot session JSON file
         sanitize: Whether to sanitize sensitive data before storage
 
     Returns:
         Summary dict with file_id, interaction_count, tool_invocation_count, errors
+
+    Note:
+        Transaction management (BEGIN/COMMIT/ROLLBACK) is the caller's
+        responsibility. This function assumes an active transaction and does
+        not commit or rollback.
     """
     summary: dict[str, Any] = {
         "session_file": str(session_file),
@@ -178,24 +187,31 @@ def ingest_copilot_session_file(
         )
         session_id = insert_session(conn, session_insert)
 
-        # Process each request as an interaction
-        for request_index, request in enumerate(session.requests):
+        # Process each request as an interaction (1-based indexing for consistency with Codex)
+        for request_index, request in enumerate(session.requests, start=1):
             try:
                 # Build context and response data
-                user_input = build_copilot_request_user_input(request)
+                user_input_dict = build_copilot_request_user_input(request)
                 context = build_copilot_request_context(request)
                 response = build_copilot_response_context(request)
 
                 if sanitize:
-                    user_input_sanitized = sanitize_json({"text": user_input})
-                    if isinstance(user_input_sanitized, dict):
-                        user_input = user_input_sanitized.get("text", "")
+                    # Sanitize message parts before serializing to JSON
+                    user_input_dict = sanitize_json(user_input_dict)
+                    if not isinstance(user_input_dict, dict):
+                        user_input_dict = {}
+                    # Serialize sanitized message dict to JSON string
+                    user_input = json_dumps(user_input_dict)
+
                     context_sanitized = sanitize_json(context)
                     if isinstance(context_sanitized, dict):
                         context = context_sanitized
                     response_sanitized = sanitize_json(response)
                     if isinstance(response_sanitized, dict):
                         response = response_sanitized
+                else:
+                    # No sanitization, just serialize the message dict to JSON
+                    user_input = json_dumps(user_input_dict)
 
                 # Insert interaction
                 interaction_insert = InteractionInsert(
@@ -249,10 +265,7 @@ def ingest_copilot_session_file(
                     e,
                 )
 
-        conn.commit()
-
     except (ValueError, TypeError, AttributeError, KeyError, OSError) as e:
-        conn.rollback()
         summary["errors"].append(
             {
                 "severity": "CRITICAL",

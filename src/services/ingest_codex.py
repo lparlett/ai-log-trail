@@ -11,24 +11,54 @@ Related: ingest.py (router), ingest_copilot.py (CoPilot counterpart)
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from sqlite3 import Connection
 from typing import Any
 
-from src.parsers.session_parser import load_session_events
 from src.parsers.handlers.db_agent_utils import (
     FileInsert,
     SessionInsert,
     InteractionInsert,
-    AgentEventInsert,
     insert_file,
     insert_session,
     insert_interaction,
-    insert_agent_event,
 )
 from src.services.redaction_rules import RedactionRule, sync_rules_to_db
 from src.services.sanitization import sanitize_json
+
+
+def _batch_load_session_events(
+    file_path: Path, batch_size: int = 1000,
+):
+    """Load JSONL events in batches to manage memory for large files.
+
+    Args:
+        file_path: Path to Codex JSONL session file
+        batch_size: Number of events per batch
+
+    Yields:
+        List of event dicts, up to batch_size at a time
+    """
+    batch: list[dict[str, Any]] = []
+    with file_path.open("r", encoding="utf-8") as handle:
+        for line_number, raw_line in enumerate(handle, start=1):
+            raw_line = raw_line.strip()
+            if not raw_line:
+                continue
+            try:
+                batch.append(json.loads(raw_line))
+                if len(batch) >= batch_size:
+                    yield batch
+                    batch = []
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Failed to parse JSON on line {line_number} of {file_path}: {exc}"
+                ) from exc
+    # Yield remaining events
+    if batch:
+        yield batch
 
 logger = logging.getLogger(__name__)
 
@@ -72,44 +102,48 @@ def ingest_codex_session_file(  # pylint: disable=unused-argument
     )
     session_id = insert_session(conn, session_insert)
 
-    # 4. Process events into interactions
-    events = list(load_session_events(session_file))
-    for interaction_index, event in enumerate(events, start=1):
-        if not isinstance(event, dict):
-            continue  # type: ignore[unreachable]
+    # 4. Process events into interactions in batches
+    interaction_index = 0
+    for batch in _batch_load_session_events(session_file, batch_size):
+        for event in batch:
+            if not isinstance(event, dict):
+                continue  # type: ignore[unreachable]
 
-        # Sanitize event payload
-        payload = event.get("payload", {})
-        if isinstance(payload, dict):
-            payload = sanitize_json(payload)
+            # Sanitize entire event before storing (prevents secret leaks in raw_json)
+            sanitized_event = sanitize_json(event)
+            if not isinstance(sanitized_event, dict):
+                continue
 
-        # Create interaction record
-        interaction_insert = InteractionInsert(
-            file_id=file_id,
-            session_id=session_id,
-            agent_type="codex",
-            interaction_index=interaction_index,
-            timestamp=event.get("timestamp"),
-            agent_user_input=event.get("user_input", ""),
-            agent_context={},
-            agent_response=event.get("response", ""),
-        )
-        interaction_id = insert_interaction(conn, interaction_insert)
+            interaction_index += 1
 
-        # Create agent_event record for the raw event
-        agent_event_insert = AgentEventInsert(
-            interaction_id=interaction_id,
-            event_type=event.get("type", "unknown"),
-            timestamp=event.get("timestamp"),
-            payload=payload,
-        )
-        insert_agent_event(conn, agent_event_insert)
+            # Sanitize event payload (already done above, but kept for clarity)
+            payload = sanitized_event.get("payload", {})
+            if isinstance(payload, dict):
+                payload = sanitize_json(payload)
+
+            # Create interaction record with sanitized raw event stored as JSON
+            # Note: Codex event types (e.g., 'event_msg', 'session_meta') don't map
+            # to agent_events CHECK constraint, so we store raw events in raw_json
+            raw_event_json = json.dumps(sanitized_event) if sanitized_event else None
+
+            interaction_insert = InteractionInsert(
+                file_id=file_id,
+                session_id=session_id,
+                agent_type="codex",
+                interaction_index=interaction_index,
+                timestamp=event.get("timestamp"),
+                agent_user_input=event.get("user_input", ""),
+                agent_context={},
+                agent_response=event.get("response", ""),
+                raw_json=raw_event_json,
+            )
+            insert_interaction(conn, interaction_insert)
 
     # Return summary
     return {
         "session_file": str(session_file),
         "file_id": file_id,
-        "prompts": len(events),
+        "prompts": interaction_index,
         "token_messages": 0,
         "turn_context_messages": 0,
         "agent_reasoning_messages": 0,

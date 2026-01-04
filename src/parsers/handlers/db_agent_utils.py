@@ -87,7 +87,11 @@ class AgentToolInvocationInsert:  # pylint: disable=too-many-instance-attributes
 
 
 def insert_file(conn: Connection, file_insert: FileInsert) -> int:
-    """Insert or update a file record. Return file_id."""
+    """Insert or update a file record. Return file_id.
+
+    On re-ingest, cascade deletes interactions, sessions, and their related
+    redactions to ensure no orphaned audit entries remain.
+    """
     cursor = conn.execute(
         "SELECT id FROM files WHERE path = ?",
         (file_insert.path,),
@@ -100,9 +104,16 @@ def insert_file(conn: Connection, file_insert: FileInsert) -> int:
             "UPDATE files SET ingested_at = CURRENT_TIMESTAMP WHERE id = ?",
             (file_id,),
         )
-        # Clean up old data from previous ingest
+        # Clean up old data from previous ingest. The DELETE CASCADE on the
+        # interactions(file_id) foreign key will automatically delete all
+        # related redactions via the redactions(interaction_id) foreign key.
         conn.execute("DELETE FROM interactions WHERE file_id = ?", (file_id,))
         conn.execute("DELETE FROM sessions WHERE file_id = ?", (file_id,))
+        # Explicitly delete file-level redactions (keyed by file_id only)
+        conn.execute(
+            "DELETE FROM redactions WHERE file_id = ? AND interaction_id IS NULL",
+            (file_id,),
+        )
         return file_id
     cursor = conn.execute(
         "INSERT INTO files (path, agent_type) VALUES (?, ?)",
