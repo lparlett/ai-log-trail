@@ -40,7 +40,7 @@ def _write_cli_config(tmp_path: Path) -> tuple[Path, Path]:
         textwrap.dedent(
             f"""
             [sessions]
-            root = "{sessions_root.as_posix()}"
+            codex_root = "{sessions_root.as_posix()}"
 
             [ingest]
             db_path = "{db_path.as_posix()}"
@@ -134,7 +134,7 @@ def test_load_config_honors_batch_override(tmp_path: Path) -> None:
     config_dir.mkdir()
     config_file = config_dir / "config.toml"
     config_file.write_text(
-        '[sessions]\nroot = "."\n[ingest]\nbatch_size = 50\n',
+        '[sessions]\ncodex_root = "."\n[ingest]\nbatch_size = 50\n',
         encoding="utf-8",
     )
 
@@ -145,11 +145,11 @@ def test_load_config_honors_batch_override(tmp_path: Path) -> None:
 
 
 def test_load_config_invalid_root(tmp_path: Path) -> None:
-    """load_config should raise when sessions.root is missing."""
+    """load_config should raise when no codex_root or copilot_root specified."""
     config_dir = tmp_path / "user"
     config_dir.mkdir()
     config_file = config_dir / "config.toml"
-    config_file.write_text('[sessions]\nroot = "./missing"\n', encoding="utf-8")
+    config_file.write_text("[sessions]\n", encoding="utf-8")
 
     with pytest.raises(ConfigError):
         load_config(config_file)

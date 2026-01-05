@@ -26,7 +26,7 @@ def _fake_config(tmp_path: Path) -> SessionsConfig:
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     return SessionsConfig(
-        sessions_root=tmp_path,
+        codex_root=tmp_path,
         ingest_batch_size=5,
         database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
         outputs=OutputPaths(reports_dir=reports_dir),
@@ -651,7 +651,7 @@ def test_migrate_main_requires_dsn(
 
     outputs = OutputPaths(reports_dir=tmp_path / "reports")
     config = SessionsConfig(
-        sessions_root=tmp_path,
+        codex_root=tmp_path,
         ingest_batch_size=1,
         database=DatabaseConfig(
             sqlite_path=tmp_path / "db.sqlite", postgres_dsn=None, backend="postgres"

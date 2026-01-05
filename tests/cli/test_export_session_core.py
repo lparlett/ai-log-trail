@@ -35,7 +35,7 @@ def _fake_config(tmp_path: Path) -> SessionsConfig:
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     return SessionsConfig(
-        sessions_root=tmp_path / "sessions",
+        codex_root=tmp_path / "sessions",
         ingest_batch_size=10,
         database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
         outputs=OutputPaths(reports_dir=reports_dir),
@@ -425,7 +425,7 @@ class TestMainErrorHandling:
             raise RuntimeError("Database connection failed")
 
         config = SessionsConfig(
-            sessions_root=tmp_path / "sessions",
+            codex_root=tmp_path / "sessions",
             database=DatabaseConfig(),
             outputs=OutputPaths(),
         )
@@ -443,7 +443,7 @@ class TestMainErrorHandling:
         """Should handle rule loading errors gracefully."""
 
         config = SessionsConfig(
-            sessions_root=tmp_path / "sessions",
+            codex_root=tmp_path / "sessions",
             database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
             outputs=OutputPaths(reports_dir=tmp_path),
         )

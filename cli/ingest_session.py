@@ -12,17 +12,26 @@ import argparse
 import logging
 import os
 from collections import Counter
+from itertools import islice
 from pathlib import Path
 from typing import Any, Sequence
 
-from src.parsers.session_parser import SessionDiscoveryError
+from src.parsers.session_parser import (
+    SessionDiscoveryError,
+    iter_copilot_session_files,
+)
 from src.services.config import ConfigError, load_config, SessionsConfig
+from src.services.database import ensure_schema, get_connection
 from src.services.ingest import (
     ingest_session_file,
     ingest_sessions_in_directory,
+    ingest_copilot_session_file,
 )
 
 __all__: list[str] = ["SessionDiscoveryError", "load_config", "main"]
+
+
+logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -90,14 +99,35 @@ def main() -> None:
         )
         return
 
-    summaries = _ingest_many_files(
-        config.sessions_root,
-        database_path,
-        limit,
-        verbose,
-        config.ingest_batch_size,
-    )
-    _report_many_results(summaries, database_path)
+    # Ingest both Codex and CoPilot sessions
+    all_summaries = []
+    remaining_limit = limit
+
+    # Process Codex sessions first (from Codex root)
+    if config.codex_root and config.codex_root.exists():
+        codex_summaries = _ingest_many_files(
+            config.codex_root,
+            database_path,
+            remaining_limit,
+            verbose,
+            config.ingest_batch_size,
+        )
+        all_summaries.extend(codex_summaries)
+        if remaining_limit is not None:
+            remaining_limit -= len(codex_summaries)
+
+    # Process CoPilot sessions (from CoPilot root if configured)
+    if config.copilot_root and config.copilot_root.exists():
+        if remaining_limit is None or remaining_limit > 0:
+            copilot_summaries = _ingest_copilot_sessions(
+                config.copilot_root,
+                database_path,
+                remaining_limit,
+                verbose,
+            )
+            all_summaries.extend(copilot_summaries)
+
+    _report_many_results(all_summaries, database_path)
 
 
 def _resolve_runtime_options(
@@ -187,6 +217,44 @@ def _ingest_many_files(
     except SessionDiscoveryError as err:
         print(f"Session discovery error: {err}")
         raise SystemExit(1) from err
+
+
+def _ingest_copilot_sessions(
+    copilot_root: Path,
+    database: Path,
+    limit: int | None,
+    verbose: bool,
+) -> list[dict[str, Any]]:
+    """Ingest CoPilot session files from workspaceStorage and return summaries."""
+    summaries: list[dict[str, Any]] = []
+    conn = get_connection(database)
+    ensure_schema(conn)
+
+    try:
+        files_iter = iter_copilot_session_files(copilot_root)
+        if limit is not None:
+            files_iter = islice(files_iter, limit)
+
+        for session_file in files_iter:
+            try:
+                if verbose:
+                    logger.info("Ingesting %s (copilot)", session_file.name)
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    summary = ingest_copilot_session_file(conn, session_file)
+                    conn.commit()
+                    summaries.append(summary)
+                except Exception:  # pylint: disable=broad-except
+                    conn.rollback()
+                    if verbose:
+                        logger.exception("Error ingesting %s", session_file)
+            except Exception:  # pylint: disable=broad-except
+                if verbose:
+                    logger.exception("Error processing %s", session_file)
+    finally:
+        conn.close()
+
+    return summaries
 
 
 def _print_error_details(errors: Any, indent: str = "  ") -> int:

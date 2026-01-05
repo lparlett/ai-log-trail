@@ -64,3 +64,53 @@ def test_detect_unrecognized_format_raises_error(tmp_path: Path) -> None:
     bad_file.write_text('{"type": "unknown_event_type", "data": "x"}')
     with pytest.raises(ValueError, match="No recognized event types"):
         detect_agent_type(bad_file)
+
+
+# Additional edge case and error scenario tests
+def test_detect_malformed_json_codex(tmp_path: Path) -> None:
+    """Test detection with malformed JSON in Codex file."""
+    bad_file = tmp_path / "malformed.jsonl"
+    bad_file.write_text('{"type": "event_msg", "data": "incomplete')
+    with pytest.raises(ValueError):
+        detect_agent_type(bad_file)
+
+
+def test_detect_codex_with_mixed_valid_invalid_lines(tmp_path: Path) -> None:
+    """Test Codex detection still works with some invalid lines."""
+    mixed_file = tmp_path / "mixed.jsonl"
+    mixed_file.write_text(
+        '{"type": "event_msg"}\n{"bad json}\n{"type": "session_meta"}'
+    )
+    result = detect_agent_type(mixed_file)
+    if result != "codex":
+        raise AssertionError(f"Should detect codex from valid lines, got {result}")
+
+
+def test_detect_large_codex_file(tmp_path: Path) -> None:
+    """Test detection works with large Codex file (many lines)."""
+    large_file = tmp_path / "large.jsonl"
+    lines = ['{"type": "event_msg", "id": %d}' % i for i in range(1000)]
+    large_file.write_text("\n".join(lines))
+    result = detect_agent_type(large_file)
+    if result != "codex":
+        raise AssertionError(f"Expected 'codex' from large file, got {result}")
+
+
+def test_detect_unicode_in_codex_file(tmp_path: Path) -> None:
+    """Test detection works with unicode content."""
+    unicode_file = tmp_path / "unicode.jsonl"
+    unicode_file.write_text(
+        '{"type": "event_msg", "text": "こんにちは 🚀"}\n', encoding="utf-8"
+    )
+    result = detect_agent_type(unicode_file)
+    if result != "codex":
+        raise AssertionError(f"Expected 'codex' with unicode, got {result}")
+
+
+def test_detect_codex_first_line_only(tmp_path: Path) -> None:
+    """Test Codex detection from just first line."""
+    first_line_file = tmp_path / "first.jsonl"
+    first_line_file.write_text('{"type": "event_msg"}')
+    result = detect_agent_type(first_line_file)
+    if result != "codex":
+        raise AssertionError(f"Expected 'codex' from first line, got {result}")

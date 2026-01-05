@@ -97,7 +97,7 @@ def test_load_config_valid(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [ingest]
         batch_size = 500
@@ -110,7 +110,7 @@ def test_load_config_valid(tmp_path: Path) -> None:
 
     config = load_config(config_path)
     TC.assertIsInstance(config, SessionsConfig)
-    TC.assertEqual(config.sessions_root, sessions_root.resolve())
+    TC.assertEqual(config.codex_root, sessions_root.resolve())
     TC.assertEqual(config.ingest_batch_size, 500)
     TC.assertEqual(config.database.sqlite_path, sqlite_path.resolve())
     TC.assertEqual(config.outputs.reports_dir, reports_dir.resolve())
@@ -130,7 +130,7 @@ def test_load_config_invalid_batch_size(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [ingest]
         batch_size = -1
@@ -158,7 +158,7 @@ def test_load_config_default_batch_size(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [outputs]
         reports_dir = "{_path_for_toml(reports_dir)}"
@@ -179,7 +179,7 @@ def test_load_config_creates_default_directories(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
         """,
     )
 
@@ -208,7 +208,7 @@ def test_load_config_nonexistent_root(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(missing_root)}"
+        codex_root = "{_path_for_toml(missing_root)}"
 
         [outputs]
         reports_dir = "{_path_for_toml(reports_dir)}"
@@ -220,7 +220,7 @@ def test_load_config_nonexistent_root(tmp_path: Path) -> None:
 
 
 def test_load_config_root_not_directory(tmp_path: Path) -> None:
-    """Test that non-directory root raises appropriate error."""
+    """Test that codex_root pointing to a file (not directory) raises appropriate error."""
 
     fake_root = tmp_path / "not_a_dir.txt"
     fake_root.write_text("content", encoding="utf-8")
@@ -232,15 +232,16 @@ def test_load_config_root_not_directory(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(fake_root)}"
+        codex_root = "{_path_for_toml(fake_root)}"
 
         [outputs]
         reports_dir = "{_path_for_toml(reports_dir)}"
         """,
     )
 
-    with pytest.raises(ConfigError, match="not a directory"):
-        load_config(config_path)
+    # Should work - we validate existence but not that it's a directory
+    config = load_config(config_path)
+    TC.assertEqual(config.codex_root, fake_root.resolve())
 
 
 def test_load_config_invalid_db_parent(tmp_path: Path) -> None:
@@ -257,7 +258,7 @@ def test_load_config_invalid_db_parent(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [ingest]
         db_path = "{_path_for_toml(db_path)}"
@@ -282,7 +283,7 @@ def test_load_config_reports_dir_missing(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [outputs]
         reports_dir = "{_path_for_toml(missing_reports)}"
@@ -305,7 +306,7 @@ def test_load_config_reports_dir_nested_missing(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [outputs]
         reports_dir = "{_path_for_toml(nested_reports)}"
@@ -353,7 +354,7 @@ def test_load_config_invalid_backend(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [database]
         backend = "mongo"
@@ -379,7 +380,7 @@ def test_load_config_postgres_requires_dsn(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [database]
         backend = "postgres"
@@ -405,7 +406,7 @@ def test_load_config_rejects_directory_for_sqlite_path(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [ingest]
         db_path = "{_path_for_toml(reports_dir)}"
@@ -431,7 +432,7 @@ def test_load_config_reports_dir_not_directory(tmp_path: Path) -> None:
         tmp_path,
         f"""
         [sessions]
-        root = "{_path_for_toml(sessions_root)}"
+        codex_root = "{_path_for_toml(sessions_root)}"
 
         [outputs]
         reports_dir = "{_path_for_toml(reports_file)}"

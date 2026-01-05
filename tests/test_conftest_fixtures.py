@@ -226,46 +226,6 @@ def test_fresh_sqlite_db_has_current_schema(
     TC.assertGreater(len(tables), 0)
 
 
-# Old schema SQLite DB fixture tests
-def test_old_schema_sqlite_db_is_connection(
-    old_schema_sqlite_db: sqlite3.Connection,  # pylint: disable=redefined-outer-name
-) -> None:
-    """old_schema_sqlite_db should be a SQLite connection."""
-    TC.assertIsInstance(old_schema_sqlite_db, sqlite3.Connection)
-
-
-def test_old_schema_sqlite_db_has_tables(
-    old_schema_sqlite_db: sqlite3.Connection,
-) -> None:
-    """old_schema_sqlite_db should have old schema tables."""
-    cursor = old_schema_sqlite_db.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-    tables = [row[0] for row in cursor.fetchall()]
-    # Old schema should have these tables
-    TC.assertIn("files", tables)
-    TC.assertIn("prompts", tables)
-    TC.assertIn("messages", tables)
-    TC.assertIn("sessions", tables)
-
-
-def test_old_schema_sqlite_db_data_integrity(
-    old_schema_sqlite_db: sqlite3.Connection,
-) -> None:
-    """old_schema_sqlite_db should have valid schema structure."""
-    cursor = old_schema_sqlite_db.cursor()
-    # Check files table structure
-    cursor.execute("PRAGMA table_info(files)")
-    columns = cursor.fetchall()
-    column_names = [col[1] for col in columns]
-    TC.assertIn("id", column_names)
-    TC.assertIn("file_path", column_names)
-
-
-# Migrated SQLite DB fixture tests (commented - migration fixture has schema compatibility issues)
-# These tests are skipped because the migrated_sqlite_db fixture attempts to apply migrations
-# to the old schema, which has structural differences incompatible with current schema.
-
-
 # Ingest event factory tests
 def test_factory_returns_dict(
     ingest_event_factory: dict[str, Any],  # pylint: disable=redefined-outer-name

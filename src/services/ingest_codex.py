@@ -65,6 +65,47 @@ def _batch_load_session_events(
 logger = logging.getLogger(__name__)
 
 
+def _extract_codex_session_metadata(
+    session_file: Path,
+) -> dict[str, Any]:
+    """Extract session metadata from the first session_meta event in a Codex file.
+
+    Args:
+        session_file: Path to Codex JSONL session file
+
+    Returns:
+        Dict containing session metadata (id, cwd, originator, cli_version, etc.)
+    """
+    try:
+        with session_file.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                    if event.get("type") == "session_meta":
+                        payload = event.get("payload", {})
+                        if isinstance(payload, dict):
+                            return {
+                                "id": payload.get("id"),
+                                "cwd": payload.get("cwd"),
+                                "originator": payload.get("originator"),
+                                "cli_version": payload.get("cli_version"),
+                                "timestamp": payload.get("timestamp"),
+                                "approval_policy": payload.get("approval_policy"),
+                                "sandbox_mode": payload.get("sandbox_mode"),
+                                "network_access": payload.get("network_access"),
+                            }
+                except json.JSONDecodeError:
+                    pass
+    except (OSError, IOError):
+        pass
+
+    # Return empty dict if no session_meta found
+    return {}
+
+
 def ingest_codex_session_file(  # pylint: disable=unused-argument
     conn: Connection,
     session_file: Path,
@@ -95,16 +136,19 @@ def ingest_codex_session_file(  # pylint: disable=unused-argument
     if rules:
         sync_rules_to_db(conn, rules)
 
-    # 3. Create session record with empty metadata
+    # 3. Extract session metadata from session_meta event
+    session_metadata = _extract_codex_session_metadata(session_file)
+
+    # 4. Create session record with extracted metadata
     session_insert = SessionInsert(
         file_id=file_id,
         agent_type="codex",
-        agent_session_id="default",
-        agent_metadata={},
+        agent_session_id=session_metadata.get("id") or "default",
+        agent_metadata=session_metadata,
     )
     session_id = insert_session(conn, session_insert)
 
-    # 4. Process events into interactions in batches
+    # 5. Process events into interactions in batches
     interaction_index = 0
     for batch in _batch_load_session_events(session_file, batch_size):
         for event in batch:

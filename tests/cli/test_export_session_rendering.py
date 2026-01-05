@@ -32,7 +32,7 @@ class TestRenderExport:
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         return SessionsConfig(
-            sessions_root=tmp_path / "sessions",
+            codex_root=tmp_path / "sessions",
             ingest_batch_size=10,
             database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
             outputs=OutputPaths(reports_dir=reports_dir),
@@ -225,7 +225,7 @@ class TestRenderExportErrorPaths:
         )
 
         config = SessionsConfig(
-            sessions_root=tmp_path / "sessions",
+            codex_root=tmp_path / "sessions",
             database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
             outputs=OutputPaths(reports_dir=tmp_path),
         )
@@ -249,7 +249,7 @@ class TestRenderExportErrorPaths:
     def test_render_export_with_empty_groups(self, tmp_path: Path) -> None:
         """Should render export with empty user groups."""
         config = SessionsConfig(
-            sessions_root=tmp_path / "sessions",
+            codex_root=tmp_path / "sessions",
             database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
             outputs=OutputPaths(reports_dir=tmp_path),
         )
@@ -470,7 +470,7 @@ def test_render_event_with_redaction_counts(tmp_path: Path) -> None:
     )
 
     config = SessionsConfig(
-        sessions_root=tmp_path / "sessions",
+        codex_root=tmp_path / "sessions",
         database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
         outputs=OutputPaths(reports_dir=tmp_path),
     )

@@ -50,6 +50,33 @@ def iter_session_files(root: Path) -> Iterator[Path]:
                         yield file_path
 
 
+def iter_copilot_session_files(root: Path) -> Iterator[Path]:
+    """Yield all CoPilot session files under ``root``/*/chatSessions/ in sorted order.
+
+    CoPilot stores chat sessions in workspace-specific hashed directories, with
+    the structure: ``root/<workspace_hash>/chatSessions/*.json``
+    """
+    try:
+        for workspace_dir in sorted(root.iterdir(), key=lambda p: p.name):
+            if not workspace_dir.is_dir():
+                continue
+            chat_sessions_dir = workspace_dir / "chatSessions"
+            if not chat_sessions_dir.exists() or not chat_sessions_dir.is_dir():
+                continue
+            for file_path in sorted(
+                (
+                    p
+                    for p in chat_sessions_dir.iterdir()
+                    if p.is_file() and p.suffix == ".json"
+                ),
+                key=lambda p: p.name,
+            ):
+                yield file_path
+    except (OSError, PermissionError):
+        # If we can't iterate the CoPilot root (e.g., permissions), yield nothing
+        pass
+
+
 def load_session_events(file_path: Path) -> list[dict[str, Any]]:
     """Load JSONL session events from disk."""
 

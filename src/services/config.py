@@ -49,8 +49,7 @@ class OutputPaths:
 class SessionsConfig:
     """User-defined settings for locating Codex and CoPilot session logs."""
 
-    sessions_root: Path  # Legacy Codex root path (for backward compatibility)
-    codex_root: Path | None = None  # Explicit Codex sessions path
+    codex_root: Path | None = None  # Codex sessions path
     copilot_root: Path | None = None  # CoPilot sessions path
     ingest_batch_size: int = 1000
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
@@ -65,7 +64,8 @@ def load_config(config_path: Path | None = None) -> SessionsConfig:
     if not path.exists():
         raise ConfigError(
             f"Configuration file not found at {path}. "
-            "Copy user/config.example.toml to user/config.toml and set sessions root."
+            "Copy user/config.example.toml to user/config.toml and set "
+            "codex_root and/or copilot_root."
         )
 
     try:
@@ -77,19 +77,8 @@ def load_config(config_path: Path | None = None) -> SessionsConfig:
     if not isinstance(sessions, dict):
         raise ConfigError("Missing [sessions] table in configuration.")
 
-    root_value = sessions.get("root")
-    if not root_value:
-        raise ConfigError("Configuration requires 'root' under [sessions].")
-
-    root = Path(root_value).expanduser().resolve()
-    if not root.exists():
-        raise ConfigError(f"Configured sessions root does not exist: {root}")
-
-    if not root.is_dir():
-        raise ConfigError(f"Configured sessions root is not a directory: {root}")
-
-    # Load optional Codex and CoPilot roots
-    codex_root_value = sessions.get("codex_root") or sessions.get("root")
+    # Load Codex and CoPilot roots (at least one should be specified)
+    codex_root_value = sessions.get("codex_root")
     codex_root = (
         Path(codex_root_value).expanduser().resolve() if codex_root_value else None
     )
@@ -103,6 +92,11 @@ def load_config(config_path: Path | None = None) -> SessionsConfig:
     if copilot_root and not copilot_root.exists():
         raise ConfigError(f"Configured copilot_root does not exist: {copilot_root}")
 
+    if not codex_root and not copilot_root:
+        raise ConfigError(
+            "Configuration requires at least one of codex_root or copilot_root under [sessions]."
+        )
+
     ingest_config = data.get("ingest", {})
     batch_size = _load_batch_size(ingest_config)
     database_cfg = _load_database_config(ingest_config, data.get("database", {}))
@@ -112,7 +106,6 @@ def load_config(config_path: Path | None = None) -> SessionsConfig:
     )
 
     return SessionsConfig(
-        sessions_root=root,
         codex_root=codex_root,
         copilot_root=copilot_root,
         ingest_batch_size=batch_size,

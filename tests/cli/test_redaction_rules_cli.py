@@ -22,7 +22,7 @@ def _fake_config(tmp_path: Path) -> SessionsConfig:
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     return SessionsConfig(
-        sessions_root=tmp_path,
+        codex_root=tmp_path,
         ingest_batch_size=10,
         database=DatabaseConfig(sqlite_path=tmp_path / "db.sqlite"),
         outputs=OutputPaths(reports_dir=reports_dir),

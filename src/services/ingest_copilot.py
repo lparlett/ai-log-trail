@@ -23,10 +23,12 @@ from src.parsers.handlers.db_agent_utils import (
     FileInsert,
     SessionInsert,
     InteractionInsert,
+    AgentEventInsert,
     AgentToolInvocationInsert,
     insert_file,
     insert_session,
     insert_interaction,
+    insert_agent_event,
     insert_tool_invocation,
     json_dumps,
 )
@@ -197,21 +199,20 @@ def ingest_copilot_session_file(
 
                 if sanitize:
                     # Sanitize message parts before serializing to JSON
-                    user_input_dict = sanitize_json(user_input_dict)
-                    if not isinstance(user_input_dict, dict):
+                    sanitized_input = sanitize_json(user_input_dict)
+                    if not isinstance(sanitized_input, dict):
                         user_input_dict = {}
-                    # Serialize sanitized message dict to JSON string
-                    user_input = json_dumps(user_input_dict)
-
+                    else:
+                        user_input_dict = sanitized_input
                     context_sanitized = sanitize_json(context)
                     if isinstance(context_sanitized, dict):
                         context = context_sanitized
                     response_sanitized = sanitize_json(response)
                     if isinstance(response_sanitized, dict):
                         response = response_sanitized
-                else:
-                    # No sanitization, just serialize the message dict to JSON
-                    user_input = json_dumps(user_input_dict)
+
+                # Serialize message dict to JSON string
+                user_input = json_dumps(user_input_dict)
 
                 # Insert interaction
                 interaction_insert = InteractionInsert(
@@ -228,12 +229,30 @@ def ingest_copilot_session_file(
                 interaction_id = insert_interaction(conn, interaction_insert)
                 summary["interaction_count"] += 1
 
-                # Process tool invocations in response
-                for response_part in request.response:
+                # Process response parts as agent events
+                for response_part_index, response_part in enumerate(request.response):
+                    # Map CoPilot response part kinds to agent_events event_type
+                    # Most response parts that aren't tool invocations are reasoning/context
                     if (
                         response_part.kind == "toolInvocation"
                         and response_part.toolName
                     ):
+                        # Create agent event for tool invocation
+                        event_payload = {
+                            "toolName": response_part.toolName,
+                            "toolId": response_part.toolId,
+                            "toolCallId": response_part.toolCallId,
+                        }
+                        event_insert = AgentEventInsert(
+                            interaction_id=interaction_id,
+                            event_type="function_plan",  # Tool invocations are function plans
+                            timestamp=None,
+                            payload=event_payload,
+                            raw_json=None,
+                        )
+                        insert_agent_event(conn, event_insert)
+
+                        # Also create tool invocation record
                         tool_insert = AgentToolInvocationInsert(
                             interaction_id=interaction_id,
                             agent_type="copilot",
@@ -248,6 +267,32 @@ def ingest_copilot_session_file(
                         )
                         insert_tool_invocation(conn, tool_insert)
                         summary["tool_invocation_count"] += 1
+
+                    else:
+                        # Create agent_reasoning event for non-tool response parts
+                        # (text, code, references, etc.)
+                        reasoning_payload: dict[str, str | int] = {
+                            "kind": response_part.kind,
+                            "value": (
+                                response_part.value
+                                if response_part.value is not None
+                                else ""
+                            ),
+                            "index": response_part_index,
+                        }
+                        event_insert = AgentEventInsert(
+                            interaction_id=interaction_id,
+                            event_type="agent_reasoning",
+                            timestamp=None,
+                            payload=reasoning_payload,
+                            raw_json=json_dumps(
+                                {
+                                    "kind": response_part.kind,
+                                    "value": response_part.value,
+                                }
+                            ),
+                        )
+                        insert_agent_event(conn, event_insert)
 
             except (ValueError, TypeError, AttributeError, KeyError) as e:
                 summary["errors"].append(

@@ -1,9 +1,12 @@
 # AI Log Trail Configuration
 # Copy this file to config.toml and customize for your environment
 
-# Sessions root (required)
+# Sessions roots (at least one required)
 [sessions]
-root = "C:/Users/<you>/.codex/sessions"  # Path to Codex/Copilot logs (adjust as needed)
+# Codex sessions location (year/month/day directory structure)
+codex_root = "C:/Users/<you>/.codex/sessions"
+# CoPilot sessions location (VS Code workspaceStorage with hashed workspace dirs)
+copilot_root = "C:/Users/<you>/AppData/Roaming/Code/User/workspaceStorage"
 
 # Ingest settings
 [ingest]

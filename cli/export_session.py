@@ -135,7 +135,13 @@ def _render_export(
     """Render the prompt log export and redaction summary."""
 
     try:
-        session_file = find_first_session_file(config.sessions_root)
+        # Use first available session root
+        sessions_root = config.codex_root or config.copilot_root
+        if not sessions_root:
+            return [
+                "No session roots configured (codex_root or copilot_root required)"
+            ], []
+        session_file = find_first_session_file(sessions_root)
     except SessionDiscoveryError as err:
         return [f"Session discovery error: {err}"], []
 

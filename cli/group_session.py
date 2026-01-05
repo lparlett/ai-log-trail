@@ -203,7 +203,13 @@ def main() -> None:
         config = _load_configuration()
         if output_path is None:
             output_path = config.outputs.reports_dir / "session.txt"
-        session_file = find_first_session_file(config.sessions_root)
+        # Use first available session root
+        sessions_root = config.codex_root or config.copilot_root
+        if not sessions_root:
+            raise ConfigError(
+                "No session roots configured (codex_root or copilot_root required)"
+            )
+        session_file = find_first_session_file(sessions_root)
     except (ConfigError, SessionDiscoveryError) as err:
         if isinstance(err, ConfigError):
             message = f"Configuration error: {err}"

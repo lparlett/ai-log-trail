@@ -54,6 +54,7 @@ __all__ = [
     "SessionDiscoveryError",
     "ingest_session_file",
     "ingest_sessions_in_directory",
+    "ingest_copilot_session_file",
     "detect_agent_type",
     "SessionSummary",
 ]
